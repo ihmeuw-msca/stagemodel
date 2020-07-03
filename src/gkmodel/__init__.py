@@ -1,1 +1,1 @@
-from .model import OverallModel, StudyModel
+from .model import OverallModel, StudyModel, result_to_df

@@ -2,7 +2,7 @@
     model
     ~~~~~
 """
-from typing import List
+from typing import List, Union
 import numpy as np
 import pandas as pd
 from mrtool import MRData, LinearCovModel
@@ -65,36 +65,6 @@ class OverallModel:
         data = self.data if data is None else data
         mat = self.create_design_mat(data)
         return mat.dot(self.soln)
-
-    def result_df(self,
-                  prediction: str = 'prediction',
-                  residual: str = 'residual') -> pd.DataFrame:
-        """Convert the result to data frame.
-
-        Args:
-            prediction (str, optional):
-                Column name of the prediction. Default to ``'prediction'``.
-            residual (str, optional):
-                Column name of the residual. Default to ``'residual'``.
-
-        Returns: Result data frame
-        """
-        df = self.data.to_df()
-        pred = self.predict()
-        resi = self.data.obs - pred
-        df[prediction] = pred
-        df[residual] = resi
-
-        return df
-
-    def save_result_df(self, path: str):
-        """Save result data frame
-
-        Args:
-            path (str): Path to save the result data frame.
-        """
-        df = self.result_df()
-        df.to_csv(path, index=False)
 
 
 class StudyModel:
@@ -164,36 +134,6 @@ class StudyModel:
 
         return np.sum(mat*soln, axis=1)
 
-    def result_df(self,
-                  prediction: str = 'prediction',
-                  residual: str = 'residual') -> pd.DataFrame:
-        """Convert the result to data frame.
-
-        Args:
-            prediction (str, optional):
-                Column name of the prediction. Default to ``'prediction'``.
-            residual (str, optional):
-                Column name of the residual. Default to ``'residual'``.
-
-        Returns: Result data frame
-        """
-        df = self.data.to_df()
-        pred = self.predict()
-        resi = self.data.obs - pred
-        df[prediction] = pred
-        df[residual] = resi
-
-        return df
-
-    def save_result_df(self, path: str):
-        """Save result data frame
-
-        Args:
-            path (str): Path to save the result data frame.
-        """
-        df = self.result_df()
-        df.to_csv(path, index=False)
-
 
 def solve_ls(mat: np.ndarray,
              obs: np.ndarray, obs_se: np.ndarray) -> np.ndarray:
@@ -210,3 +150,27 @@ def solve_ls(mat: np.ndarray,
     v = obs_se**2
     return np.linalg.solve((mat.T/v).dot(mat),
                            (mat.T/v).dot(obs))
+
+
+def result_to_df(model: Union[OverallModel, StudyModel],
+                 prediction: str = 'prediction',
+                 residual: str = 'residual') -> pd.DataFrame:
+    """Create result data frame.
+
+    Args:
+        model (Union[OverallModel, StudyModel]): Model instance.
+        prediction (str, optional):
+            Column name of the prediction. Defaults to 'prediction'.
+        residual (str, optional):
+            Column name of the residual. Defaults to 'residual'.
+
+    Returns:
+        pd.DataFrame: Result data frame.
+    """
+    df = model.data.to_df()
+    pred = model.predict()
+    resi = model.data.obs - pred
+    df[prediction] = pred
+    df[residual] = resi
+
+    return df
