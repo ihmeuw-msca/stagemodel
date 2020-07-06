@@ -5,7 +5,61 @@
 from typing import List, Union
 import numpy as np
 import pandas as pd
+from copy import deepcopy
+from dataclasses import dataclass, field, asdict
+
 from mrtool import MRData, LinearCovModel
+
+
+class TwoStageModel:
+
+    def __init__(
+        self, 
+        data: MRData,
+        cov_models_stage1: List[LinearCovModel],
+        cov_models_stage2: List[LinearCovModel],
+    ):
+        self.cov_models1 = cov_models_stage1
+        self.cov_models2 = cov_models_stage2 
+        self.cov_names1 = self._get_cov_names(self.cov_models1)
+        self.cov_names2 = self._get_cov_names(self.cov_models2)
+        
+        self.data1 = data
+
+    def _get_cov_names(self, cov_models):
+        cov_names = []
+        for cov_model in cov_models:
+            for name in cov_model.covs:
+                cov_names.append(name)
+        return cov_names
+
+    def _get_stage2_data(self, data: MRData):
+        pred = self.model1.predict(data)
+        resi = data.obs - pred
+        df = data.to_df()
+        df['resi_stage1'] = resi
+        data2= MRData()
+        data2.load_df(df, col_covs=self.cov_names2, col_obs='resi_stage1', col_obs_se='obs_se', col_study_id='study_id')
+        return data2
+
+    def fit_model(self):
+        # -------- stage 1: calling overall model -----------
+        self.model1 = OverallModel(self.data1, self.cov_models1)
+        self.model1.fit_model() 
+
+        # ---------- stage 2: calling study model ----------
+        self.data2 = self._get_stage2_data(self.data1)
+        self.model2 = StudyModel(self.data2, self.cov_names2)
+        self.model2.fit_model()
+
+    def predict(self, data: MRData = None):
+        if data is None:
+            data = self.data1
+        data._sort_by_data_id()
+        pred1 = self.model1.predict(data)
+        data2 = self._get_stage2_data(data)
+        data2._sort_by_data_id()
+        return self.model2.predict(data2) + pred1
 
 
 class OverallModel:
