@@ -56,9 +56,7 @@ class TwoStageModel:
             data = self.data1
         data._sort_by_data_id()
         pred1 = self.model1.predict(data)
-        data2 = self._get_stage2_data(data)
-        data2._sort_by_data_id()
-        return self.model2.predict(data2) + pred1
+        return self.model2.predict(data) + pred1
 
 
 class OverallModel:
