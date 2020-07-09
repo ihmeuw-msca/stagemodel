@@ -58,6 +58,16 @@ class TwoStageModel:
         pred1 = self.model1.predict(data)
         return self.model2.predict(data) + pred1
 
+    def write_stage1_soln(self):
+        names = []
+        for cov_model in self.cov_models1:
+            names.extend([cov_model.name + '_' + str(i) for i in range(cov_model.num_x_vars)])
+        assert len(names) == len(self.model1.soln)
+        return pd.DataFrame(list(zip(names, self.model1.soln)), columns=['name', 'value'])
+
+    def write_stage2_soln(self):
+        return pd.DataFrame.from_dict(self.model2.soln, orient='index', columns=self.cov_names2).reset_index().rename(columns={'index': 'study_id'})
+
 
 class OverallModel:
     """Overall model in charge of fit all location together without
@@ -203,9 +213,12 @@ def solve_ls(mat: np.ndarray,
                            (mat.T/v).dot(obs))
 
 
-def result_to_df(model: Union[OverallModel, StudyModel],
-                 prediction: str = 'prediction',
-                 residual: str = 'residual') -> pd.DataFrame:
+def result_to_df(
+    model: Union[OverallModel, StudyModel],
+    data: MRData,
+    prediction: str = 'prediction',
+    residual: str = 'residual'
+) -> pd.DataFrame:
     """Create result data frame.
 
     Args:
@@ -218,9 +231,10 @@ def result_to_df(model: Union[OverallModel, StudyModel],
     Returns:
         pd.DataFrame: Result data frame.
     """
-    df = model.data.to_df()
-    pred = model.predict()
-    resi = model.data.obs - pred
+    data._sort_by_data_id()
+    pred = model.predict(data)
+    resi = data.obs - pred
+    df = data.to_df()
     df[prediction] = pred
     df[residual] = resi
 
