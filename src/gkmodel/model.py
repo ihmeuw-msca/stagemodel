@@ -58,15 +58,21 @@ class TwoStageModel:
         pred1 = self.model1.predict(data)
         return self.model2.predict(data) + pred1
 
-    def write_stage1_soln(self):
+    def write_stage1_soln(self, path: str = None):
         names = []
         for cov_model in self.cov_models1:
             names.extend([cov_model.name + '_' + str(i) for i in range(cov_model.num_x_vars)])
         assert len(names) == len(self.model1.soln)
-        return pd.DataFrame(list(zip(names, self.model1.soln)), columns=['name', 'value'])
+        df = pd.DataFrame(list(zip(names, self.model1.soln)), columns=['name', 'value'])
+        if path is not None:
+            df.to_csv(path)
+        return df
 
-    def write_stage2_soln(self):
-        return pd.DataFrame.from_dict(self.model2.soln, orient='index', columns=self.cov_names2).reset_index().rename(columns={'index': 'study_id'})
+    def write_stage2_soln(self, path: str = None):
+        df = pd.DataFrame.from_dict(self.model2.soln, orient='index', columns=self.cov_names2).reset_index().rename(columns={'index': 'study_id'})
+        if path is not None:
+            df.to_csv(path)
+        return df
 
 
 class OverallModel:
