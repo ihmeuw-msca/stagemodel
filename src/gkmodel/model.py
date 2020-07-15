@@ -51,12 +51,12 @@ class TwoStageModel:
         self.model2 = StudyModel(self.data2, self.cov_names2)
         self.model2.fit_model()
 
-    def predict(self, data: MRData = None, random_slope: Dict[str, float] = None):
+    def predict(self, data: MRData = None, slope_quantile: Dict[str, float] = None):
         if data is None:
             data = self.data1
         data._sort_by_data_id()
         pred1 = self.model1.predict(data)
-        return self.model2.predict(data, random_slope=random_slope) + pred1
+        return self.model2.predict(data, slope_quantile=slope_quantile) + pred1
 
     def write_stage1_soln(self, path: str = None):
         names = []
@@ -177,7 +177,7 @@ class StudyModel:
             obs_se = self.data.obs_se[index]
             self.soln[study_id] = solve_ls(mat, obs, obs_se)
 
-    def predict(self, data: MRData = None, random_slope: Dict[str, float] = None) -> np.ndarray:
+    def predict(self, data: MRData = None, slope_quantile: Dict[str, float] = None) -> np.ndarray:
         """Predict from fitting result.
 
         Args:
@@ -199,8 +199,8 @@ class StudyModel:
             for study_id in data.study_id
         ])
         
-        if random_slope is not None:
-            for name, quantile in random_slope.items():
+        if slope_quantile is not None:
+            for name, quantile in slope_quantile.items():
                 if name not in self.cov_names:
                     raise ValueError(f'{name} is not in covariates for study model, which are {self.cov_names}.')
                 i = self.cov_names.index(name)
