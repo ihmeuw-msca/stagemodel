@@ -2,7 +2,7 @@
     model
     ~~~~~
 """
-from typing import List, Union
+from typing import List, Union, Dict
 import numpy as np
 import pandas as pd
 from copy import deepcopy
@@ -51,12 +51,12 @@ class TwoStageModel:
         self.model2 = StudyModel(self.data2, self.cov_names2)
         self.model2.fit_model()
 
-    def predict(self, data: MRData = None):
+    def predict(self, data: MRData = None, slope_quantile: Dict[str, float] = None):
         if data is None:
             data = self.data1
         data._sort_by_data_id()
         pred1 = self.model1.predict(data)
-        return self.model2.predict(data) + pred1
+        return self.model2.predict(data, slope_quantile=slope_quantile) + pred1
 
     def write_stage1_soln(self, path: str = None):
         names = []
@@ -177,7 +177,7 @@ class StudyModel:
             obs_se = self.data.obs_se[index]
             self.soln[study_id] = solve_ls(mat, obs, obs_se)
 
-    def predict(self, data: MRData = None) -> np.ndarray:
+    def predict(self, data: MRData = None, slope_quantile: Dict[str, float] = None) -> np.ndarray:
         """Predict from fitting result.
 
         Args:
@@ -198,6 +198,17 @@ class StudyModel:
             if study_id in self.data.study_id else mean_soln
             for study_id in data.study_id
         ])
+        
+        if slope_quantile is not None:
+            for name, quantile in slope_quantile.items():
+                if name not in self.cov_names:
+                    raise ValueError(f'{name} is not in covariates for study model, which are {self.cov_names}.')
+                i = self.cov_names.index(name)
+                v = np.quantile(soln[:, i], quantile)
+                if quantile >= 0.5:
+                    soln[:, i] = np.maximum(soln[:, i], v)
+                else:
+                    soln[:, i] = np.minimum(soln[:, i], v)
 
         return np.sum(mat*soln, axis=1)
 
