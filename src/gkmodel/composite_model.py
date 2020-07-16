@@ -23,12 +23,6 @@ class StagewiseModel:
         self.datas = [data]
         self.fitted_models = []
 
-    def _get_cov_names(self, cov_models):
-        cov_names = []
-        for cov_model in cov_models:
-            cov_names.extend(cov_model.covs)
-        return cov_names
-
     def _get_stage_data(self, data: MRData):
         pred = self.fitted_models[-1].predict(self.datas[-1])
         resi = self.datas[-1].obs - pred
