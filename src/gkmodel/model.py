@@ -149,6 +149,7 @@ class StudyModel:
                 List of linear covariate model from MRTool.
         """
         self.data = data
+        self.cov_models = cov_models
         self.cov_names = self._get_cov_names(cov_models)
         self.mat = self.create_design_mat()
         self.soln = None
