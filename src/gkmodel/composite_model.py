@@ -5,6 +5,7 @@
 from typing import List, Union, Dict, Tuple
 import pandas as pd
 import numpy as np
+from copy import deepcopy
 
 from mrtool import MRData, LinearCovModel
 from .model import OverallModel, StudyModel
@@ -29,15 +30,11 @@ class StagewiseModel:
         return cov_names
 
     def _get_stage_data(self, data: MRData):
-        pred = self.fitted_models[-1].predict(data)
-        resi = data.obs - pred
-        df = data.to_df()
-        df['resi'] = resi
-        data_next = MRData()
-        cov_names = []
-        for i in range(len(self.sub_models)):
-            cov_names.extend(self._get_cov_names(self.sub_models[i][1]))
-        data_next.load_df(df, col_covs=cov_names, col_obs='resi', col_obs_se='obs_se', col_study_id='study_id')
+        pred = self.fitted_models[-1].predict(self.datas[-1])
+        resi = self.datas[-1].obs - pred
+        data_next = deepcopy(self.datas[-1])
+        data_next.obs = resi
+
         self.datas.append(data_next)
 
     def fit_model(self):
