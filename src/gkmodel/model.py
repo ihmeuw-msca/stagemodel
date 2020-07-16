@@ -210,15 +210,13 @@ class StudyModel:
 
         if slope_quantile is not None:
             for name, quantile in slope_quantile.items():
-                if name not in self.cov_names:
-                    raise ValueError(
-                        f'{name} is not in covariates for study model, which are {self.cov_names}.')
-                i = self.cov_names.index(name)
-                v = np.quantile(soln[:, i], quantile)
-                if quantile >= 0.5:
-                    soln[:, i] = np.maximum(soln[:, i], v)
-                else:
-                    soln[:, i] = np.minimum(soln[:, i], v)
+                if name in self.cov_names:
+                    i = self.cov_names.index(name)
+                    v = np.quantile(soln[:, i], quantile)
+                    if quantile >= 0.5:
+                        soln[:, i] = np.maximum(soln[:, i], v)
+                    else:
+                        soln[:, i] = np.minimum(soln[:, i], v)
 
         return np.sum(mat*soln, axis=1)
 
