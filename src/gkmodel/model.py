@@ -140,9 +140,7 @@ class StudyModel:
     """Study specific Model.
     """
 
-    def __init__(self,
-                 data: MRData,
-                 cov_models: List[LinearCovModel]):
+    def __init__(self, data: MRData, cov_models: List[LinearCovModel]):
         """Constructor of StudyModel
 
         Args:
@@ -151,10 +149,15 @@ class StudyModel:
                 List of linear covariate model from MRTool.
         """
         self.data = data
-        self.cov_models = cov_models
-        self.cov_names = [cov_model.covs[0] for cov_model in self.cov_models]
+        self.cov_names = self._get_cov_names(cov_models)
         self.mat = self.create_design_mat()
         self.soln = None
+
+    def _get_cov_names(self, cov_models):
+        cov_names = []
+        for cov_model in cov_models:
+            cov_names.extend(cov_model.covs)
+        return cov_names
 
     def create_design_mat(self, data: MRData = None) -> np.ndarray:
         """Create design matrix.
