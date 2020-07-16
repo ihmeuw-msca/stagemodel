@@ -2,6 +2,7 @@
     model
     ~~~~~
 """
+from pathlib import Path
 from typing import List, Union, Dict
 import numpy as np
 import pandas as pd
@@ -14,65 +15,54 @@ from mrtool import MRData, LinearCovModel
 class TwoStageModel:
 
     def __init__(
-        self, 
+        self,
         data: MRData,
         cov_models_stage1: List[LinearCovModel],
         cov_models_stage2: List[LinearCovModel],
     ):
         self.cov_models1 = cov_models_stage1
-        self.cov_models2 = cov_models_stage2 
-        self.cov_names1 = self._get_cov_names(self.cov_models1)
-        self.cov_names2 = self._get_cov_names(self.cov_models2)
-        
-        self.data1 = data
+        self.cov_models2 = cov_models_stage2
 
-    def _get_cov_names(self, cov_models):
-        cov_names = []
-        for cov_model in cov_models:
-            cov_names.extend(cov_model.covs)
-        return cov_names
+        self.model1 = None
+        self.model2 = None
+
+        self.data1 = data
+        self.data2 = None
 
     def _get_stage2_data(self, data: MRData):
         pred = self.model1.predict(data)
         resi = data.obs - pred
-        df = data.to_df()
-        df['resi_stage1'] = resi
-        data2= MRData()
-        data2.load_df(df, col_covs=self.cov_names2, col_obs='resi_stage1', col_obs_se='obs_se', col_study_id='study_id')
+        data2 = deepcopy(self.data1)
+        data2.obs = resi
         return data2
 
     def fit_model(self):
         # -------- stage 1: calling overall model -----------
         self.model1 = OverallModel(self.data1, self.cov_models1)
-        self.model1.fit_model() 
+        self.model1.fit_model()
 
         # ---------- stage 2: calling study model ----------
         self.data2 = self._get_stage2_data(self.data1)
-        self.model2 = StudyModel(self.data2, self.cov_names2)
+        self.model2 = StudyModel(self.data2, self.cov_models2)
         self.model2.fit_model()
 
-    def predict(self, data: MRData = None, slope_quantile: Dict[str, float] = None):
+    def predict(self, data: MRData = None,
+                slope_quantile: Dict[str, float] = None):
         if data is None:
             data = self.data1
         data._sort_by_data_id()
         pred1 = self.model1.predict(data)
         return self.model2.predict(data, slope_quantile=slope_quantile) + pred1
 
-    def write_stage1_soln(self, path: str = None):
-        names = []
-        for cov_model in self.cov_models1:
-            names.extend([cov_model.name + '_' + str(i) for i in range(cov_model.num_x_vars)])
-        assert len(names) == len(self.model1.soln)
-        df = pd.DataFrame(list(zip(names, self.model1.soln)), columns=['name', 'value'])
-        if path is not None:
-            df.to_csv(path)
-        return df
+    def write_soln(self, path: str = "./"):
+        """Write the solutions.
 
-    def write_stage2_soln(self, path: str = None):
-        df = pd.DataFrame.from_dict(self.model2.soln, orient='index', columns=self.cov_names2).reset_index().rename(columns={'index': 'study_id'})
-        if path is not None:
-            df.to_csv(path)
-        return df
+        Args:
+            path (str, optional): [description]. Defaults to "./".
+        """
+        base_path = Path(path)
+        self.model1.write_soln(base_path / "result1.csv")
+        self.model2.write_soln(base_path / "result2.csv")
 
 
 class OverallModel:
@@ -133,20 +123,36 @@ class OverallModel:
         mat = self.create_design_mat(data)
         return mat.dot(self.soln)
 
+    def write_soln(self, path: str = None):
+        names = []
+        for cov_model in self.cov_models:
+            names.extend([cov_model.name + '_' + str(i)
+                          for i in range(cov_model.num_x_vars)])
+        assert len(names) == len(self.soln)
+        df = pd.DataFrame(list(zip(names, self.soln)),
+                          columns=['name', 'value'])
+        if path is not None:
+            df.to_csv(path)
+        return df
+
 
 class StudyModel:
     """Study specific Model.
     """
 
-    def __init__(self, data: MRData, cov_names: List[str]):
+    def __init__(self,
+                 data: MRData,
+                 cov_models: List[LinearCovModel]):
         """Constructor of StudyModel
 
         Args:
             data (MRData): MRTool data object.
-            cov_names (List[str]): Covaraite names used in the model.
+            cov_models (List[LinearCovModel]):
+                List of linear covariate model from MRTool.
         """
         self.data = data
-        self.cov_names = cov_names
+        self.cov_models = cov_models
+        self.cov_names = [cov_model.covs[0] for cov_model in self.cov_models]
         self.mat = self.create_design_mat()
         self.soln = None
 
@@ -198,11 +204,12 @@ class StudyModel:
             if study_id in self.data.study_id else mean_soln
             for study_id in data.study_id
         ])
-        
+
         if slope_quantile is not None:
             for name, quantile in slope_quantile.items():
                 if name not in self.cov_names:
-                    raise ValueError(f'{name} is not in covariates for study model, which are {self.cov_names}.')
+                    raise ValueError(
+                        f'{name} is not in covariates for study model, which are {self.cov_names}.')
                 i = self.cov_names.index(name)
                 v = np.quantile(soln[:, i], quantile)
                 if quantile >= 0.5:
@@ -211,6 +218,16 @@ class StudyModel:
                     soln[:, i] = np.minimum(soln[:, i], v)
 
         return np.sum(mat*soln, axis=1)
+
+    def write_soln(self, path: str = None):
+        df = pd.DataFrame.from_dict(
+            self.soln,
+            orient='index',
+            columns=self.cov_names
+        ).reset_index().rename(columns={'index': 'study_id'})
+        if path is not None:
+            df.to_csv(path)
+        return df
 
 
 def solve_ls(mat: np.ndarray,
