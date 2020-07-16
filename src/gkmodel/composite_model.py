@@ -66,17 +66,4 @@ class StagewiseModel:
         return pred
 
     def write_soln(self, i, path: str = None):
-        model = self.fitted_models[i]
-        if model.__class__.__name__ == 'OverallModel':
-            names = []
-            for cov_model in model.cov_models:
-                names.extend([cov_model.name + '_' + str(i) for i in range(cov_model.num_x_vars)])
-            assert len(names) == len(model.soln)
-            df = pd.DataFrame(list(zip(names, model.soln)), columns=['name', 'value'])
-        else:
-            names = self._get_cov_names(model.cov_models)
-            df = pd.DataFrame.from_dict(model.soln, orient='index', columns=names).reset_index().rename(columns={'index': 'study_id'})
-        
-        if path is not None:
-            df.to_csv(path)
-        return df
+        return self.fitted_models[i].write_soln()
