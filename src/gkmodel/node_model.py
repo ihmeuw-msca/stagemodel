@@ -8,6 +8,8 @@ import pandas as pd
 
 from mrtool import MRData, LinearCovModel
 
+from .utils import solve_ls, result_to_df
+
 
 class NodeModel:
     """Node model that carries independent task.
@@ -117,7 +119,7 @@ class NodeModel:
         """
         raise NotImplementedError()
 
-    def write_soln(self, path: Union[str, None] = None) -> pd.DataFrame:
+    def soln_to_df(self, path: Union[str, None] = None) -> pd.DataFrame:
         """Write the soln to the path.
 
         Args:
@@ -130,6 +132,30 @@ class NodeModel:
             pd.DataFrame: Data frame that contains the result.
         """
         raise NotImplementedError()
+
+    def result_to_df(self,
+                     path: str = None,
+                     prediction: str = 'prediction',
+                     residual: str = 'residual') -> pd.DataFrame:
+        """Create result data frame.
+
+        Args:
+            path (Union[str, None], optional):
+                Address that save the result, include the file name.
+                If ``None`` do not save the result, only return the result data
+                frame. Defaults to None.
+            prediction (str, optional):
+                Column name of the prediction. Defaults to 'prediction'.
+            residual (str, optional):
+                Column name of the residual. Defaults to 'residual'.
+
+        Returns:
+            pd.DataFrame: Result data frame.
+        """
+        self._assert_has_data()
+        self._assert_has_soln()
+        return result_to_df(self, self.data,
+                            path=path, prediction=prediction, residual=residual)
 
 
 class OverallModel(NodeModel):
@@ -151,7 +177,7 @@ class OverallModel(NodeModel):
         mat = self.create_design_mat(data)
         return mat.dot(self.soln)
 
-    def write_soln(self, path: str = None) -> pd.DataFrame:
+    def soln_to_df(self, path: str = None) -> pd.DataFrame:
         """Write solution.
         """
         names = []
@@ -218,7 +244,7 @@ class StudyModel(NodeModel):
 
         return np.sum(mat*soln, axis=1)
 
-    def write_soln(self, path: str = None) -> pd.DataFrame:
+    def soln_to_df(self, path: str = None) -> pd.DataFrame:
         """Write solution.
         """
         df = pd.DataFrame.from_dict(
@@ -229,48 +255,3 @@ class StudyModel(NodeModel):
         if path is not None:
             df.to_csv(path)
         return df
-
-
-def solve_ls(mat: np.ndarray,
-             obs: np.ndarray, obs_se: np.ndarray) -> np.ndarray:
-    """Solve least square problem
-
-    Args:
-        mat (np.ndarray): Data matrix
-        obs (np.ndarray): Observations
-        obs_se (np.ndarray): Observation standard error.
-
-    Returns:
-        np.ndarray: Solution.
-    """
-    v = obs_se**2
-    return np.linalg.solve((mat.T/v).dot(mat),
-                           (mat.T/v).dot(obs))
-
-
-def result_to_df(
-    model: Union[OverallModel, StudyModel],
-    data: MRData,
-    prediction: str = 'prediction',
-    residual: str = 'residual'
-) -> pd.DataFrame:
-    """Create result data frame.
-
-    Args:
-        model (Union[OverallModel, StudyModel]): Model instance.
-        prediction (str, optional):
-            Column name of the prediction. Defaults to 'prediction'.
-        residual (str, optional):
-            Column name of the residual. Defaults to 'residual'.
-
-    Returns:
-        pd.DataFrame: Result data frame.
-    """
-    data._sort_by_data_id()
-    pred = model.predict(data)
-    resi = data.obs - pred
-    df = data.to_df()
-    df[prediction] = pred
-    df[residual] = resi
-
-    return df

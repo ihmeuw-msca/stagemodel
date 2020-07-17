@@ -8,7 +8,8 @@ import numpy as np
 from copy import deepcopy
 
 from mrtool import MRData, LinearCovModel
-from .model import NodeModel, OverallModel, StudyModel
+from .node_model import NodeModel, OverallModel, StudyModel
+from .utils import result_to_df
 
 
 class StagewiseModel:
@@ -46,8 +47,18 @@ class StagewiseModel:
             pred += model.predict(data, slope_quantile=slope_quantile)
         return pred
 
-    def write_soln(self, i, path: str = None):
-        return self.node_models[i].write_soln(path)
+    def soln_to_df(self, i: int, path: str = None):
+        return self.node_models[i].soln_to_df(path)
+
+    def result_to_df(self, i: int = None, path: str = None,
+                     prediction: str = 'prediction',
+                     residual: str = 'residual'):
+        if i is not None:
+            df = self.node_models[i].result_to_df(path, prediction, residual)
+        else:
+            df = result_to_df(self, self.data_list[0],
+                              path, prediction, residual)
+        return df
 
 
 class TwoStageModel:
@@ -91,13 +102,3 @@ class TwoStageModel:
         data._sort_by_data_id()
         pred1 = self.model1.predict(data)
         return self.model2.predict(data, slope_quantile=slope_quantile) + pred1
-
-    def write_soln(self, path: str = "./"):
-        """Write the solutions.
-
-        Args:
-            path (str, optional): [description]. Defaults to "./".
-        """
-        base_path = Path(path)
-        self.model1.write_soln(base_path / "result1.csv")
-        self.model2.write_soln(base_path / "result2.csv")
