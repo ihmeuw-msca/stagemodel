@@ -9,23 +9,26 @@ import pandas as pd
 from mrtool import MRData, LinearCovModel
 
 
-class OverallModel:
-    """Overall model in charge of fit all location together without
-    random effects.
+class NodeModel:
+    """Node model that carries independent task.
     """
 
     def __init__(self,
                  data: MRData = None,
                  cov_models: List[LinearCovModel] = None):
-        """Constructor of OverallModel
+        """Constructor of the NodeModel.
 
         Args:
-            data (MRData): Data object from MRTool
+            data (MRData):
+                Data object from MRTool. If ``None``, no data is attached.
+                Default to ``None``.
             cov_models (List[LinearCovModel]):
-                List of linear covariate model from MRTool.
+                List of linear covariate model from MRTool. If ``None``,
+                intercept model will be added. Default to ``None``.
         """
         self.data = None
         self.cov_models = [LinearCovModel('intercept')] if cov_models is None else cov_models
+        self.cov_names = self.get_cov_names()
         self.mat = None
         self.soln = None
 
@@ -35,13 +38,39 @@ class OverallModel:
         """Attach data into the model object.
 
         Args:
-            data (Union[MRData, None]): Data object if ``None``, do nothing.
+            data (Union[MRData, None]):
+                Data object if ``None``, do nothing. Default to ``None``.
         """
         if data is not None:
             self.data = data
-            for cov_model in self.cov_models:
-                cov_model.attach_data(self.data)
             self.mat = self.create_design_mat()
+
+    def assert_attached_data(self):
+        """Assert attached data.
+
+        Raises:
+            ValueError: If attribute ``data`` is ``None``, return value error.
+        """
+        if self.data is None:
+            raise ValueError("Must attach data!")
+
+    def get_cov_names(self,
+                      cov_models: List[LinearCovModel] = None) -> List[str]:
+        """Get covariates names.
+
+        Args:
+            cov_models (List[LinearCovModel], optional):
+                List of covariate models. If ``None`` ues the attribute
+                ``cov_models``. Defaults to None.
+
+        Returns:
+            List[str]: List of covariates names.
+        """
+        cov_models = self.cov_models if cov_models is None else cov_models
+        cov_names = []
+        for cov_model in self.cov_models:
+            cov_names.extend(cov_model.covs)
+        return cov_names
 
     def create_design_mat(self, data: MRData = None) -> np.ndarray:
         """Create design matrix
@@ -59,28 +88,69 @@ class OverallModel:
                           for cov_model in self.cov_models])
 
     def fit_model(self):
-        """Fit the model
+        """Fit the model.
         """
-        if self.data is None:
-            raise ValueError("Must attach data before fitting the model.")
-        self.soln = solve_ls(self.mat, self.data.obs, self.data.obs_se)
+        raise NotImplementedError()
 
-    def predict(self, data: MRData = None) -> np.ndarray:
+    def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
         """Predict from fitting result.
 
         Args:
             data (MRData, optional):
                 Given data object to predict, if ``None`` use the attribute
                 ``self.data`` Defaults to None.
+            kwargs (Dict): Other keyword arguments.
 
         Returns:
             np.ndarray: Prediction.
+        """
+        raise NotImplementedError()
+
+    def write_soln(self, path: Union[str, None] = None) -> pd.DataFrame:
+        """Write the soln to the path.
+
+        Args:
+            path (Union[str, None], optional):
+                Address that save the result, include the file name.
+                If ``None`` do not save the result, only return the result data
+                frame. Defaults to None.
+
+        Returns:
+            pd.DataFrame: Data frame that contains the result.
+        """
+        raise NotImplementedError()
+
+
+class OverallModel(NodeModel):
+    """Overall model in charge of fit all location together without
+    random effects.
+    """
+
+    def attach_data(self, data: Union[MRData, None]):
+        """Attach data into the model object.
+        """
+        if data is not None:
+            self.data = data
+            for cov_model in self.cov_models:
+                cov_model.attach_data(self.data)
+            self.mat = self.create_design_mat()
+
+    def fit_model(self):
+        """Fit the model
+        """
+        self.assert_attached_data()
+        self.soln = solve_ls(self.mat, self.data.obs, self.data.obs_se)
+
+    def predict(self, data: MRData = None) -> np.ndarray:
+        """Predict from fitting result.
         """
         data = self.data if data is None else data
         mat = self.create_design_mat(data)
         return mat.dot(self.soln)
 
-    def write_soln(self, path: str = None):
+    def write_soln(self, path: str = None) -> pd.DataFrame:
+        """Write solution.
+        """
         names = []
         for cov_model in self.cov_models:
             names.extend([cov_model.name + '_' + str(i)
@@ -93,65 +163,14 @@ class OverallModel:
         return df
 
 
-class StudyModel:
+class StudyModel(NodeModel):
     """Study specific Model.
     """
-
-    def __init__(self,
-                 data: MRData = None,
-                 cov_models: List[LinearCovModel] = None):
-        """Constructor of StudyModel
-
-        Args:
-            data (MRData): MRTool data object.
-            cov_models (List[LinearCovModel]):
-                List of linear covariate model from MRTool.
-        """
-        self.data = None
-        self.cov_models = [LinearCovModel('intercept')] if cov_models is None else cov_models
-        self.cov_names = self._get_cov_names()
-        self.mat = None
-        self.soln = None
-
-        self.attach_data(data)
-
-    def attach_data(self, data: Union[MRData, None]):
-        """Attach data into the model object.
-
-        Args:
-            data (Union[MRData, None]): Data object if ``None``, do nothing.
-        """
-        if data is not None:
-            self.data = data
-            self.mat = self.create_design_mat()
-
-    def _get_cov_names(self):
-        cov_names = []
-        for cov_model in self.cov_models:
-            cov_names.extend(cov_model.covs)
-        return cov_names
-
-    def create_design_mat(self, data: MRData = None) -> np.ndarray:
-        """Create design matrix.
-
-        Args:
-            data (MRData, optional):
-                Create design matrix from the given data object. If ``None`` use
-                the attribute ``self.data``. Defaults to None. Defaults to None.
-
-        Returns:
-            np.ndarray: Design matrix.
-        """
-        data = self.data if data is None else data
-        mat = data.get_covs(self.cov_names)
-
-        return mat
 
     def fit_model(self):
         """Fit the model.
         """
-        if self.data is None:
-            raise ValueError("Must attach data before fitting the model.")
+        self.assert_attached_data()
         self.soln = {}
         for study_id in self.data.studies:
             index = self.data.study_id == study_id
@@ -196,7 +215,9 @@ class StudyModel:
 
         return np.sum(mat*soln, axis=1)
 
-    def write_soln(self, path: str = None):
+    def write_soln(self, path: str = None) -> pd.DataFrame:
+        """Write solution.
+        """
         df = pd.DataFrame.from_dict(
             self.soln,
             orient='index',
