@@ -143,7 +143,7 @@ class OverallModel(NodeModel):
         self._assert_has_data()
         self.soln = solve_ls(self.mat, self.data.obs, self.data.obs_se)
 
-    def predict(self, data: MRData = None) -> np.ndarray:
+    def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
         """Predict from fitting result.
         """
         self._assert_has_soln()
@@ -184,7 +184,8 @@ class StudyModel(NodeModel):
 
     def predict(self,
                 data: MRData = None,
-                slope_quantile: Dict[str, float] = None) -> np.ndarray:
+                slope_quantile: Dict[str, float] = None,
+                **kwargs) -> np.ndarray:
         """Predict from fitting result.
 
         Args:
