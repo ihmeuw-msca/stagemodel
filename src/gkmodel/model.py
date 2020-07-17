@@ -2,7 +2,7 @@
     model
     ~~~~~
 """
-from typing import List, Union
+from typing import List, Union, Dict
 import numpy as np
 import pandas as pd
 
@@ -143,7 +143,7 @@ class OverallModel(NodeModel):
         self._assert_has_data()
         self.soln = solve_ls(self.mat, self.data.obs, self.data.obs_se)
 
-    def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
+    def predict(self, data: MRData = None) -> np.ndarray:
         """Predict from fitting result.
         """
         self._assert_has_soln()
@@ -182,7 +182,9 @@ class StudyModel(NodeModel):
             obs_se = self.data.obs_se[index]
             self.soln[study_id] = solve_ls(mat, obs, obs_se)
 
-    def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
+    def predict(self,
+                data: MRData = None,
+                slope_quantile: Dict[str, float] = None) -> np.ndarray:
         """Predict from fitting result.
 
         Args:
@@ -192,7 +194,6 @@ class StudyModel(NodeModel):
                 use the quantile or more extreme slope. Default to ``None``.
         """
         self._assert_has_soln()
-        slope_quantile = None if 'slope_quantile' not in kwargs else kwargs['slope_quantile']
         data = self.data if data is None else data
         mat = self.mat if data is None else self.create_design_mat(data)
 
