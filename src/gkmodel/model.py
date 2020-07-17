@@ -2,7 +2,7 @@
     model
     ~~~~~
 """
-from typing import List, Union, Dict
+from typing import List, Union
 import numpy as np
 import pandas as pd
 
@@ -45,7 +45,7 @@ class NodeModel:
             self.data = data
             self.mat = self.create_design_mat()
 
-    def assert_attached_data(self):
+    def _assert_has_data(self):
         """Assert attached data.
 
         Raises:
@@ -53,6 +53,15 @@ class NodeModel:
         """
         if self.data is None:
             raise ValueError("Must attach data!")
+
+    def _assert_has_soln(self):
+        """Assert has solution.
+
+        Raises:
+            ValueError: If attribute ``soln`` is ``None``, return value error.
+        """
+        if self.soln is None:
+            raise ValueError("Must fit model!")
 
     def get_cov_names(self,
                       cov_models: List[LinearCovModel] = None) -> List[str]:
@@ -138,12 +147,13 @@ class OverallModel(NodeModel):
     def fit_model(self):
         """Fit the model
         """
-        self.assert_attached_data()
+        self._assert_has_data()
         self.soln = solve_ls(self.mat, self.data.obs, self.data.obs_se)
 
-    def predict(self, data: MRData = None) -> np.ndarray:
+    def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
         """Predict from fitting result.
         """
+        self._assert_has_soln()
         data = self.data if data is None else data
         mat = self.create_design_mat(data)
         return mat.dot(self.soln)
@@ -170,7 +180,7 @@ class StudyModel(NodeModel):
     def fit_model(self):
         """Fit the model.
         """
-        self.assert_attached_data()
+        self._assert_has_data()
         self.soln = {}
         for study_id in self.data.studies:
             index = self.data.study_id == study_id
@@ -179,19 +189,17 @@ class StudyModel(NodeModel):
             obs_se = self.data.obs_se[index]
             self.soln[study_id] = solve_ls(mat, obs, obs_se)
 
-    def predict(self,
-                data: MRData = None,
-                slope_quantile: Dict[str, float] = None) -> np.ndarray:
+    def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
         """Predict from fitting result.
 
         Args:
-            data (MRData, optional):
-                Given data object to predict, if ``None`` use the attribute
-                ``self.data`` Defaults to None.
-
-        Returns:
-            np.ndarray: Prediction.
+            slope_quantile (Dict[str, float]):
+                Dictionary with key as the covariate name and value the
+                quantile. If ``None`` will predict for specific group, else
+                use the quantile or more extreme slope. Default to ``None``.
         """
+        self._assert_has_soln()
+        slope_quantile = None if 'slope_quantile' not in kwargs else kwargs['slope_quantile']
         data = self.data if data is None else data
         mat = self.mat if data is None else self.create_design_mat(data)
 
