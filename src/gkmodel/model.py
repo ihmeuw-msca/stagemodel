@@ -2,67 +2,11 @@
     model
     ~~~~~
 """
-from pathlib import Path
 from typing import List, Union, Dict
 import numpy as np
 import pandas as pd
-from copy import deepcopy
-from dataclasses import dataclass, field, asdict
 
 from mrtool import MRData, LinearCovModel
-
-
-class TwoStageModel:
-
-    def __init__(
-        self,
-        data: MRData,
-        cov_models_stage1: List[LinearCovModel],
-        cov_models_stage2: List[LinearCovModel],
-    ):
-        self.cov_models1 = cov_models_stage1
-        self.cov_models2 = cov_models_stage2
-
-        self.model1 = None
-        self.model2 = None
-
-        self.data1 = data
-        self.data2 = None
-
-    def _get_stage2_data(self, data: MRData):
-        pred = self.model1.predict(data)
-        resi = data.obs - pred
-        data2 = deepcopy(self.data1)
-        data2.obs = resi
-        return data2
-
-    def fit_model(self):
-        # -------- stage 1: calling overall model -----------
-        self.model1 = OverallModel(self.data1, self.cov_models1)
-        self.model1.fit_model()
-
-        # ---------- stage 2: calling study model ----------
-        self.data2 = self._get_stage2_data(self.data1)
-        self.model2 = StudyModel(self.data2, self.cov_models2)
-        self.model2.fit_model()
-
-    def predict(self, data: MRData = None,
-                slope_quantile: Dict[str, float] = None):
-        if data is None:
-            data = self.data1
-        data._sort_by_data_id()
-        pred1 = self.model1.predict(data)
-        return self.model2.predict(data, slope_quantile=slope_quantile) + pred1
-
-    def write_soln(self, path: str = "./"):
-        """Write the solutions.
-
-        Args:
-            path (str, optional): [description]. Defaults to "./".
-        """
-        base_path = Path(path)
-        self.model1.write_soln(base_path / "result1.csv")
-        self.model2.write_soln(base_path / "result2.csv")
 
 
 class OverallModel:
@@ -71,8 +15,8 @@ class OverallModel:
     """
 
     def __init__(self,
-                 data: MRData,
-                 cov_models: List[LinearCovModel]):
+                 data: MRData = None,
+                 cov_models: List[LinearCovModel] = None):
         """Constructor of OverallModel
 
         Args:
@@ -80,13 +24,24 @@ class OverallModel:
             cov_models (List[LinearCovModel]):
                 List of linear covariate model from MRTool.
         """
-        self.data = data
-        self.cov_models = cov_models
-        for cov_model in self.cov_models:
-            cov_model.attach_data(self.data)
-
-        self.mat = self.create_design_mat()
+        self.data = None
+        self.cov_models = [LinearCovModel('intercept')] if cov_models is None else cov_models
+        self.mat = None
         self.soln = None
+
+        self.attach_data(data)
+
+    def attach_data(self, data: Union[MRData, None]):
+        """Attach data into the model object.
+
+        Args:
+            data (Union[MRData, None]): Data object if ``None``, do nothing.
+        """
+        if data is not None:
+            self.data = data
+            for cov_model in self.cov_models:
+                cov_model.attach_data(self.data)
+            self.mat = self.create_design_mat()
 
     def create_design_mat(self, data: MRData = None) -> np.ndarray:
         """Create design matrix
@@ -106,6 +61,8 @@ class OverallModel:
     def fit_model(self):
         """Fit the model
         """
+        if self.data is None:
+            raise ValueError("Must attach data before fitting the model.")
         self.soln = solve_ls(self.mat, self.data.obs, self.data.obs_se)
 
     def predict(self, data: MRData = None) -> np.ndarray:
@@ -140,7 +97,9 @@ class StudyModel:
     """Study specific Model.
     """
 
-    def __init__(self, data: MRData, cov_models: List[LinearCovModel]):
+    def __init__(self,
+                 data: MRData = None,
+                 cov_models: List[LinearCovModel] = None):
         """Constructor of StudyModel
 
         Args:
@@ -148,15 +107,27 @@ class StudyModel:
             cov_models (List[LinearCovModel]):
                 List of linear covariate model from MRTool.
         """
-        self.data = data
-        self.cov_models = cov_models
-        self.cov_names = self._get_cov_names(cov_models)
-        self.mat = self.create_design_mat()
+        self.data = None
+        self.cov_models = [LinearCovModel('intercept')] if cov_models is None else cov_models
+        self.cov_names = self._get_cov_names()
+        self.mat = None
         self.soln = None
 
-    def _get_cov_names(self, cov_models):
+        self.attach_data(data)
+
+    def attach_data(self, data: Union[MRData, None]):
+        """Attach data into the model object.
+
+        Args:
+            data (Union[MRData, None]): Data object if ``None``, do nothing.
+        """
+        if data is not None:
+            self.data = data
+            self.mat = self.create_design_mat()
+
+    def _get_cov_names(self):
         cov_names = []
-        for cov_model in cov_models:
+        for cov_model in self.cov_models:
             cov_names.extend(cov_model.covs)
         return cov_names
 
@@ -179,6 +150,8 @@ class StudyModel:
     def fit_model(self):
         """Fit the model.
         """
+        if self.data is None:
+            raise ValueError("Must attach data before fitting the model.")
         self.soln = {}
         for study_id in self.data.studies:
             index = self.data.study_id == study_id
@@ -187,7 +160,9 @@ class StudyModel:
             obs_se = self.data.obs_se[index]
             self.soln[study_id] = solve_ls(mat, obs, obs_se)
 
-    def predict(self, data: MRData = None, slope_quantile: Dict[str, float] = None) -> np.ndarray:
+    def predict(self,
+                data: MRData = None,
+                slope_quantile: Dict[str, float] = None) -> np.ndarray:
         """Predict from fitting result.
 
         Args:
