@@ -43,6 +43,8 @@ class NodeModel:
         """
         if data is not None:
             self.data = data
+            for cov_model in self.cov_models:
+                cov_model.attach_data(self.data)
             self.mat = self.create_design_mat()
 
     def _assert_has_data(self):
@@ -134,15 +136,6 @@ class OverallModel(NodeModel):
     """Overall model in charge of fit all location together without
     random effects.
     """
-
-    def attach_data(self, data: Union[MRData, None]):
-        """Attach data into the model object.
-        """
-        if data is not None:
-            self.data = data
-            for cov_model in self.cov_models:
-                cov_model.attach_data(self.data)
-            self.mat = self.create_design_mat()
 
     def fit_model(self):
         """Fit the model
