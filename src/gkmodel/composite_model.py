@@ -29,10 +29,11 @@ class StagewiseModel:
         self.data_list.append(data)
 
     def fit_model(self):
-        for model in self.node_models:
+        for i, model in enumerate(self.node_models):
             model.attach_data(self.data_list[-1])
             model.fit_model()
-            self._get_next_data(model)
+            if i + 1 < self.num_models:
+                self._get_next_data(model)
 
     def predict(self,
                 data: MRData = None,
