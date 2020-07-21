@@ -102,3 +102,46 @@ class TwoStageModel:
         data._sort_by_data_id()
         pred1 = self.model1.predict(data)
         return self.model2.predict(data, slope_quantile=slope_quantile) + pred1
+
+
+class ReverseTwoStageModel:
+
+    def __init__(
+        self,
+        data: MRData,
+        cov_models_stage1: List[LinearCovModel],
+        cov_models_stage2: List[LinearCovModel],
+    ):
+        self.cov_models1 = cov_models_stage1
+        self.cov_models2 = cov_models_stage2
+
+        self.model1 = None
+        self.model2 = None
+
+        self.data1 = data
+        self.data2 = None
+
+    def _get_stage2_data(self, data: MRData):
+        pred = self.model1.predict(data)
+        resi = data.obs - pred
+        data2 = deepcopy(self.data1)
+        data2.obs = resi
+        return data2
+
+    def fit_model(self):
+        # -------- stage 1: calling study model -----------
+        self.model1 = StudyModel(self.data1, self.cov_models1)
+        self.model1.fit_model()
+
+        # ---------- stage 2: calling overall model ----------
+        self.data2 = self._get_stage2_data(self.data1)
+        self.model2 = OverallModel(self.data2, self.cov_models2)
+        self.model2.fit_model()
+
+    def predict(self, data: MRData = None,
+                slope_quantile: Dict[str, float] = None):
+        if data is None:
+            data = self.data1
+        data._sort_by_data_id()
+        pred1 = self.model1.predict(data, slope_quantile=slope_quantile)
+        return self.model2.predict(data) + pred1
