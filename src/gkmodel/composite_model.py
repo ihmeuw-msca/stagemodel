@@ -3,7 +3,7 @@
     ~~~~~~~~~~~~~~~
 """
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Tuple, Any
 import numpy as np
 from copy import deepcopy
 
@@ -36,15 +36,18 @@ class StagewiseModel:
             if i + 1 < self.num_models:
                 self._get_next_data(model)
 
-    def predict(self,
-                data: MRData = None,
-                slope_quantile: Dict[str, float] = None):
+    def predict(
+        self, 
+        data: MRData = None,
+        slope_quantile: Dict[str, float] = None,
+        ref_cov: Tuple[str, Any] = None,
+    ):
         if data is None:
             data = self.data_list[0]
         data._sort_by_data_id()
         pred = np.zeros(data.num_obs)
         for model in self.node_models:
-            pred += model.predict(data, slope_quantile=slope_quantile)
+            pred += model.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
         return pred
 
     def soln_to_df(self, i: int, path: str = None):
@@ -95,13 +98,17 @@ class TwoStageModel:
         self.model2 = StudyModel(self.data2, self.cov_models2)
         self.model2.fit_model()
 
-    def predict(self, data: MRData = None,
-                slope_quantile: Dict[str, float] = None):
+    def predict(
+        self, 
+        data: MRData = None,
+        slope_quantile: Dict[str, float] = None,
+        ref_cov: Tuple[str, Any] = None,
+    ):
         if data is None:
             data = self.data1
         data._sort_by_data_id()
         pred1 = self.model1.predict(data)
-        return self.model2.predict(data, slope_quantile=slope_quantile) + pred1
+        return self.model2.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov) + pred1
 
 
 class ReverseTwoStageModel:
@@ -138,10 +145,14 @@ class ReverseTwoStageModel:
         self.model2 = OverallModel(self.data2, self.cov_models2)
         self.model2.fit_model()
 
-    def predict(self, data: MRData = None,
-                slope_quantile: Dict[str, float] = None):
+    def predict(
+        self, 
+        data: MRData = None,
+        slope_quantile: Dict[str, float] = None,
+        ref_cov: Tuple[str, Any] = None,
+    ):
         if data is None:
             data = self.data1
         data._sort_by_data_id()
-        pred1 = self.model1.predict(data, slope_quantile=slope_quantile)
+        pred1 = self.model1.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
         return self.model2.predict(data) + pred1
