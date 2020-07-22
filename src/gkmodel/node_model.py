@@ -251,6 +251,8 @@ class StudyModel(NodeModel):
                 for study in self.data.studies:
                     study_index = self.data.study_id == study
                     ref_index = study_index & (self.data.covs[ref_cov[0]] == ref_cov[1])
+                    if sum(ref_index) != 1:
+                        raise RuntimeError('One and only one ref value per group allowed.')
                     ref_mat[study_index, covs_index] = ref_mat[ref_index, covs_index]
                 
                 ref_before_values = np.sum(ref_mat * soln, axis=1)
