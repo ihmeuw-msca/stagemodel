@@ -40,7 +40,7 @@ class StagewiseModel:
         self, 
         data: MRData = None,
         slope_quantile: Dict[str, float] = None,
-        ref_cov: Tuple[str, Any] = ('year_id', 2019),
+        ref_cov: Tuple[str, Any] = None,
     ):
         if data is None:
             data = self.data_list[0]
@@ -102,7 +102,7 @@ class TwoStageModel:
         self, 
         data: MRData = None,
         slope_quantile: Dict[str, float] = None,
-        ref_cov: Tuple[str, Any] = ('year_id', 2019),
+        ref_cov: Tuple[str, Any] = None,
     ):
         if data is None:
             data = self.data1
@@ -149,7 +149,7 @@ class ReverseTwoStageModel:
         self, 
         data: MRData = None,
         slope_quantile: Dict[str, float] = None,
-        ref_cov: Tuple[str, Any] = ('year_id', 2019),
+        ref_cov: Tuple[str, Any] = None,
     ):
         if data is None:
             data = self.data1
