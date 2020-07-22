@@ -2,9 +2,10 @@
     model
     ~~~~~
 """
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Tuple, Any
 import numpy as np
 import pandas as pd
+from copy import deepcopy
 
 from mrtool import MRData, LinearCovModel
 
@@ -208,10 +209,13 @@ class StudyModel(NodeModel):
             obs_se = self.data.obs_se[index]
             self.soln[study_id] = solve_ls(mat, obs, obs_se)
 
-    def predict(self,
-                data: MRData = None,
-                slope_quantile: Dict[str, float] = None,
-                **kwargs) -> np.ndarray:
+    def predict(
+        self,
+        data: MRData = None,
+        slope_quantile: Dict[str, float] = None,
+        ref_cov: Tuple[str, Any] = ('year_id', 2019),
+        **kwargs,
+    ) -> np.ndarray:
         """Predict from fitting result.
 
         Args:
@@ -232,17 +236,32 @@ class StudyModel(NodeModel):
             for study_id in data.study_id
         ])
 
-        if slope_quantile is not None:
-            for name, quantile in slope_quantile.items():
-                if name in self.cov_names:
-                    i = self.cov_names.index(name)
-                    v = np.quantile(soln[:, i], quantile)
-                    if quantile >= 0.5:
-                        soln[:, i] = np.maximum(soln[:, i], v)
-                    else:
-                        soln[:, i] = np.minimum(soln[:, i], v)
+        adjust_values = np.zeros(self.data.num_points)
 
-        return np.sum(mat*soln, axis=1)
+        if slope_quantile is not None:
+            covs_index = [self.cov_names.index(name) for name, _ in slope_quantile.items() if name in self.cov_names]
+            quantiles = [quantile for name, quantile in slope_quantile.items() if name in self.cov_names]
+            
+            if ref_cov is not None:
+                ref_mat = deepcopy(mat)
+                for study in self.data.studies:
+                    study_index = self.data.study_id == study
+                    ref_index = study_index & (self.data.covs[ref_cov[0]] == ref_cov[1])
+                    ref_mat[study_index, covs_index] = ref_mat[ref_index, covs_index]
+                
+                ref_before_values = np.sum(ref_mat * soln, axis=1)
+
+            for i, quantile in zip(covs_index, quantiles):
+                v = np.quantile(soln[:, i], quantile)
+                if quantile >= 0.5:
+                    soln[:, i] = np.maximum(soln[:, i], v)
+                else:
+                    soln[:, i] = np.minimum(soln[:, i], v)
+
+            if ref_cov is not None:
+                ref_after_values = np.sum(ref_mat * soln, axis=1)
+                adjust_values = ref_after_values - ref_before_values
+        return np.sum(mat*soln, axis=1) - adjust_values
 
     def soln_to_df(self, path: str = None) -> pd.DataFrame:
         """Write solution.
