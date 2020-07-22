@@ -213,7 +213,7 @@ class StudyModel(NodeModel):
         self,
         data: MRData = None,
         slope_quantile: Dict[str, float] = None,
-        ref_cov: Tuple[str, Any] = ('year_id', 2019),
+        ref_cov: Tuple[str, Any] = None,
         **kwargs,
     ) -> np.ndarray:
         """Predict from fitting result.
@@ -226,6 +226,7 @@ class StudyModel(NodeModel):
         """
         self._assert_has_soln()
         data = self.data if data is None else data
+        data._sort_by_data_id()
         mat = self.mat if data is None else self.create_design_mat(data)
 
         mean_soln = np.mean(list(self.soln.values()), axis=0)
@@ -245,28 +246,30 @@ class StudyModel(NodeModel):
                 if name in self.cov_names:
                     covs_index.append(self.cov_names.index(name))
                     quantiles.append(quantile)
-            
-            if ref_cov is not None:
-                ref_mat = deepcopy(mat)
-                for study in self.data.studies:
-                    study_index = self.data.study_id == study
-                    ref_index = study_index & (self.data.covs[ref_cov[0]] == ref_cov[1])
-                    if sum(ref_index) != 1:
-                        raise RuntimeError('One and only one ref value per group allowed.')
-                    ref_mat[study_index, covs_index] = ref_mat[ref_index, covs_index]
-                
-                ref_before_values = np.sum(ref_mat * soln, axis=1)
 
-            for i, quantile in zip(covs_index, quantiles):
-                v = np.quantile(soln[:, i], quantile)
-                if quantile >= 0.5:
-                    soln[:, i] = np.maximum(soln[:, i], v)
-                else:
-                    soln[:, i] = np.minimum(soln[:, i], v)
+            if len(covs_index) > 0:             
+                if ref_cov is not None:
+                    ref_mat = deepcopy(mat)
+                    for study in self.data.studies:
+                        study_index = self.data.study_id == study
+                        ref_index = study_index & (self.data.covs[ref_cov[0]] == ref_cov[1])
+                        if sum(ref_index) != 1:
+                            raise RuntimeError('One and only one ref value per group allowed.')
+                        ref_mat[study_index, covs_index] = ref_mat[ref_index, covs_index]
+                    
+                    ref_before_values = np.sum(ref_mat * soln, axis=1)
 
-            if ref_cov is not None:
-                ref_after_values = np.sum(ref_mat * soln, axis=1)
-                adjust_values = ref_after_values - ref_before_values
+                for i, quantile in zip(covs_index, quantiles):
+                    v = np.quantile(soln[:, i], quantile)
+                    if quantile >= 0.5:
+                        soln[:, i] = np.maximum(soln[:, i], v)
+                    else:
+                        soln[:, i] = np.minimum(soln[:, i], v)
+
+                if ref_cov is not None:
+                    ref_after_values = np.sum(ref_mat * soln, axis=1)
+                    adjust_values = ref_after_values - ref_before_values
+        
         return np.sum(mat*soln, axis=1) - adjust_values
 
     def soln_to_df(self, path: str = None) -> pd.DataFrame:
