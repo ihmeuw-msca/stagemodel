@@ -239,8 +239,12 @@ class StudyModel(NodeModel):
         adjust_values = np.zeros(self.data.num_points)
 
         if slope_quantile is not None:
-            covs_index = [self.cov_names.index(name) for name, _ in slope_quantile.items() if name in self.cov_names]
-            quantiles = [quantile for name, quantile in slope_quantile.items() if name in self.cov_names]
+            covs_index = []
+            quantiles = []
+            for name, quantile in slope_quantile.items():
+                if name in self.cov_names:
+                    covs_index.append(self.cov_names.index(name))
+                    quantiles.append(quantile)
             
             if ref_cov is not None:
                 ref_mat = deepcopy(mat)
