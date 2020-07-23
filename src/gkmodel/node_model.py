@@ -262,7 +262,7 @@ class StudyModel(NodeModel):
                         study_index = data.study_id == study
                         ref_index = study_index & (data.covs[ref_cov[0]] == ref_cov[1])
                         if sum(ref_index) != 1:
-                            warn(f'Multiple ref value for study {study} found.')
+                            warn(f'Multiple ref value for study {study} found. Using mean instead.')
                         ref_mat[np.ix_(study_index, covs_index)] = np.mean(ref_mat[np.ix_(ref_index, covs_index)], axis=0)
                     ref_before_values = np.sum(ref_mat * soln, axis=1)
 
