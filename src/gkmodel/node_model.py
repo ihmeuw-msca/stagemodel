@@ -237,7 +237,7 @@ class StudyModel(NodeModel):
             for study_id in data.study_id
         ])
 
-        adjust_values = np.zeros(self.data.num_points)
+        adjust_values = np.zeros(data.num_points)
 
         if slope_quantile is not None:
             covs_index = []
@@ -250,13 +250,12 @@ class StudyModel(NodeModel):
             if len(covs_index) > 0:             
                 if ref_cov is not None:
                     ref_mat = deepcopy(mat)
-                    for study in self.data.studies:
-                        study_index = self.data.study_id == study
-                        ref_index = study_index & (self.data.covs[ref_cov[0]] == ref_cov[1])
+                    for study in data.studies:
+                        study_index = data.study_id == study
+                        ref_index = study_index & (data.covs[ref_cov[0]] == ref_cov[1])
                         if sum(ref_index) != 1:
                             raise RuntimeError('One and only one ref value per group allowed.')
                         ref_mat[study_index, covs_index] = ref_mat[ref_index, covs_index]
-                    
                     ref_before_values = np.sum(ref_mat * soln, axis=1)
 
                 for i, quantile in zip(covs_index, quantiles):
@@ -269,7 +268,6 @@ class StudyModel(NodeModel):
                 if ref_cov is not None:
                     ref_after_values = np.sum(ref_mat * soln, axis=1)
                     adjust_values = ref_after_values - ref_before_values
-        
         return np.sum(mat*soln, axis=1) - adjust_values
 
     def soln_to_df(self, path: str = None) -> pd.DataFrame:
