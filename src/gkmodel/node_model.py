@@ -9,7 +9,7 @@ from copy import deepcopy
 
 from mrtool import MRData, LinearCovModel
 
-from .utils import solve_ls, result_to_df
+from .utils import solve_ls, solve_ls_b, result_to_df
 
 
 class NodeModel:
@@ -202,12 +202,19 @@ class StudyModel(NodeModel):
         """
         self._assert_has_data()
         self.soln = {}
+        bounds = np.vstack([cov_model.prior_beta_uniform.T
+                            for cov_model in self.cov_models])
+        use_bounds = (not np.isneginf(bounds[:, 0]).all()) or \
+            (not np.isposinf(bounds[:, 1]).all())
         for study_id in self.data.studies:
             index = self.data.study_id == study_id
             mat = self.mat[index, :]
             obs = self.data.obs[index]
             obs_se = self.data.obs_se[index]
-            self.soln[study_id] = solve_ls(mat, obs, obs_se)
+            if use_bounds:
+                self.soln[study_id] = solve_ls_b(mat, obs, obs_se, bounds)
+            else:
+                self.soln[study_id] = solve_ls(mat, obs, obs_se)
 
     def predict(
         self,
@@ -247,7 +254,7 @@ class StudyModel(NodeModel):
                     covs_index.append(self.cov_names.index(name))
                     quantiles.append(quantile)
 
-            if len(covs_index) > 0:             
+            if len(covs_index) > 0:
                 if ref_cov is not None:
                     ref_mat = deepcopy(mat)
                     for study in data.studies:
