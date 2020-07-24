@@ -287,21 +287,18 @@ class StudyModel(NodeModel):
             for cov_name, q in slope_quantile.items()
         }
         if mask_soln:
-            mean_coef = self.soln['mean']
-            masked_coefs = coefs.copy()
+            masked_coefs = np.vstack([coefs, self.soln['mean']])
             for cov_name, v in quantile_value.items():
                 index = self.cov_names.index(cov_name)
                 if slope_quantile[cov_name] >= 0.5:
                     masked_coefs[:, index] = np.maximum(masked_coefs[:, index], v)
-                    mean_coef[index] = np.maximum(mean_coef[index], v)
                 else:
                     masked_coefs[:, index] = np.minimum(masked_coefs[:, index], v)
-                    mean_coef[index] = np.minimum(mean_coef[index], v)
             masked_soln = {
                 study_id: masked_coefs[i]
                 for i, study_id in enumerate(self.data.studies)
             }
-            masked_soln['mean'] = mean_coef
+            masked_soln['mean'] = masked_coefs[-1]
             return quantile_value, masked_soln
         else:
             return quantile_value
