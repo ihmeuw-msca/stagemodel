@@ -216,7 +216,8 @@ class StudyModel(NodeModel):
                 self.soln[study_id] = solve_ls_b(mat, obs, obs_se, bounds)
             else:
                 self.soln[study_id] = solve_ls(mat, obs, obs_se)
-        self.soln['mean'] = np.mean(list(self.soln.values), axis=0)
+
+        self.soln['mean'] = np.array(list(self.soln.values())).mean(axis=0)
 
     def predict(
         self,
