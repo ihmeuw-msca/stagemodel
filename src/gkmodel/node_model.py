@@ -295,6 +295,7 @@ class StudyModel(NodeModel):
         quantile_value = {
             cov_name: np.quantile(coefs[:, self.cov_names.index(cov_name)], q)
             for cov_name, q in slope_quantile.items()
+            if cov_name in self.cov_names
         }
         if mask_soln:
             masked_coefs = np.vstack([coefs, self.soln['mean']])
