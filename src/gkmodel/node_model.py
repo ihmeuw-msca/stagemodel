@@ -5,10 +5,9 @@
 from typing import List, Union, Dict, Tuple, Any
 import numpy as np
 import pandas as pd
-from copy import deepcopy
 from warnings import warn
 
-from mrtool import MRData, LinearCovModel
+from mrtool import MRData, LinearCovModel, MRBRT
 
 from .utils import solve_ls, solve_ls_b, result_to_df
 
@@ -165,11 +164,22 @@ class OverallModel(NodeModel):
     random effects.
     """
 
-    def fit_model(self):
+    def fit_model(self, **fit_options):
         """Fit the model
         """
         self._assert_has_data()
-        self.soln = solve_ls(self.mat, self.data.obs, self.data.obs_se)
+        beta_init = solve_ls(self.mat, self.data.obs, self.data.obs_se)
+        model = MRBRT(self.data, self.cov_models)
+        gamma_init = np.zeros(model.num_z_vars)
+
+        default_fit_options = dict(
+            x0=np.hstack((beta_init, gamma_init)),
+            inner_max_iter=500,
+            inner_print_level=5,
+        )
+        fit_options = {**default_fit_options, **fit_options}
+        model.fit_model(**fit_options)
+        self.soln = model.beta_soln
 
     def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
         """Predict from fitting result.
