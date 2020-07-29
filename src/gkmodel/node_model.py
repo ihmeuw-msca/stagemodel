@@ -186,6 +186,7 @@ class OverallModel(NodeModel):
         """
         self._assert_has_soln()
         data = self.data if data is None else data
+        data._sort_by_data_id()
         mat = self.create_design_mat(data)
         return mat.dot(self.soln)
 
