@@ -5,10 +5,9 @@
 from typing import List, Union, Dict, Tuple, Any
 import numpy as np
 import pandas as pd
-from copy import deepcopy
 from warnings import warn
 
-from mrtool import MRData, LinearCovModel
+from mrtool import MRData, LinearCovModel, MRBRT
 
 from .utils import solve_ls, solve_ls_b, result_to_df
 
@@ -165,11 +164,22 @@ class OverallModel(NodeModel):
     random effects.
     """
 
-    def fit_model(self):
+    def fit_model(self, **fit_options):
         """Fit the model
         """
         self._assert_has_data()
-        self.soln = solve_ls(self.mat, self.data.obs, self.data.obs_se)
+        beta_init = solve_ls(self.mat, self.data.obs, self.data.obs_se)
+        model = MRBRT(self.data, self.cov_models)
+        gamma_init = np.zeros(model.num_z_vars)
+
+        default_fit_options = dict(
+            x0=np.hstack((beta_init, gamma_init)),
+            inner_max_iter=500,
+            inner_print_level=5,
+        )
+        fit_options = {**default_fit_options, **fit_options}
+        model.fit_model(**fit_options)
+        self.soln = model.beta_soln
 
     def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
         """Predict from fitting result.
@@ -217,6 +227,8 @@ class StudyModel(NodeModel):
             else:
                 self.soln[study_id] = solve_ls(mat, obs, obs_se)
 
+        self.soln['mean'] = np.array(list(self.soln.values())).mean(axis=0)
+
     def predict(
         self,
         data: MRData = None,
@@ -235,48 +247,71 @@ class StudyModel(NodeModel):
         self._assert_has_soln()
         data = self.data if data is None else data
         data._sort_by_data_id()
+
         mat = self.mat if data is None else self.create_design_mat(data)
 
-        mean_soln = np.mean(list(self.soln.values()), axis=0)
+        if slope_quantile is not None:
+            _, soln = self.get_soln_quantile(slope_quantile, mask_soln=True)
+        else:
+            soln = self.soln
 
-        soln = np.array([
-            self.soln[study_id]
-            if study_id in self.data.study_id else mean_soln
+        coefs = np.vstack([
+            soln[study_id]
+            if study_id in self.data.studies else soln['mean']
             for study_id in data.study_id
         ])
 
-        adjust_values = np.zeros(data.num_points)
+        intercept_shift = {study_id: 0.0 for study_id in data.studies}
+        if ref_cov is not None:
+            for study_id in data.studies:
+                sub_mat = mat[(data.study_id == study_id) &
+                              (data.covs[ref_cov[0]] == ref_cov[1])]
+                if sub_mat.shape[0] != 1:
+                    warn(f'Multiple ref value for study {study_id} found. Using mean instead.')
+                study_name = study_id if study_id in self.data.studies else 'mean'
+                intercept_shift[study_id] = np.mean(sub_mat.dot(self.soln[study_name] - soln[study_name]))
 
-        if slope_quantile is not None:
-            covs_index = []
-            quantiles = []
-            for name, quantile in slope_quantile.items():
-                if name in self.cov_names:
-                    covs_index.append(self.cov_names.index(name))
-                    quantiles.append(quantile)
+        shifts = np.array([intercept_shift[study_id] for study_id in data.study_id])
 
-            if len(covs_index) > 0:
-                if ref_cov is not None:
-                    ref_mat = deepcopy(mat)
-                    for study in data.studies:
-                        study_index = data.study_id == study
-                        ref_index = study_index & (data.covs[ref_cov[0]] == ref_cov[1])
-                        if sum(ref_index) != 1:
-                            warn(f'Multiple ref value for study {study} found. Using mean instead.')
-                        ref_mat[np.ix_(study_index, covs_index)] = np.mean(ref_mat[np.ix_(ref_index, covs_index)], axis=0)
-                    ref_before_values = np.sum(ref_mat * soln, axis=1)
+        return np.sum(mat*coefs, axis=1) + shifts
 
-                for i, quantile in zip(covs_index, quantiles):
-                    v = np.quantile(soln[:, i], quantile)
-                    if quantile >= 0.5:
-                        soln[:, i] = np.maximum(soln[:, i], v)
-                    else:
-                        soln[:, i] = np.minimum(soln[:, i], v)
+    def get_soln_quantile(self,
+                          slope_quantile: Dict[str, float],
+                          mask_soln: bool = False) -> Union[Dict[str, float],
+                                                            Tuple[Dict[str, float], Dict[Any, np.ndarray]]]:
+        """Get solution quantile
 
-                if ref_cov is not None:
-                    ref_after_values = np.sum(ref_mat * soln, axis=1)
-                    adjust_values = ref_after_values - ref_before_values
-        return np.sum(mat*soln, axis=1) - adjust_values
+        Args:
+            slope_quantile (Dict[str, float]): Solution quantile.
+            mask_soln (bool, optional):
+                If ``True``, return masked solution. Default to ``False``.
+
+        Returns:
+            Union[Dict[str, float], Tuple[Dict[str, float], Dict[Any, np.ndarray]]]:
+                Quantile of the solution or with the masked solution.
+        """
+        coefs = np.array([self.soln[study_id]
+                          for study_id in self.data.studies])
+        quantile_value = {
+            cov_name: np.quantile(coefs[:, self.cov_names.index(cov_name)], q)
+            for cov_name, q in slope_quantile.items()
+        }
+        if mask_soln:
+            masked_coefs = np.vstack([coefs, self.soln['mean']])
+            for cov_name, v in quantile_value.items():
+                index = self.cov_names.index(cov_name)
+                if slope_quantile[cov_name] >= 0.5:
+                    masked_coefs[:, index] = np.maximum(masked_coefs[:, index], v)
+                else:
+                    masked_coefs[:, index] = np.minimum(masked_coefs[:, index], v)
+            masked_soln = {
+                study_id: masked_coefs[i]
+                for i, study_id in enumerate(self.data.studies)
+            }
+            masked_soln['mean'] = masked_coefs[-1]
+            return quantile_value, masked_soln
+        else:
+            return quantile_value
 
     def soln_to_df(self, path: str = None) -> pd.DataFrame:
         """Write solution.
