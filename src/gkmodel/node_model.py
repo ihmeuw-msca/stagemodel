@@ -293,11 +293,15 @@ class StudyModel(NodeModel):
         """
         coefs = np.array([self.soln[study_id]
                           for study_id in self.data.studies])
-        quantile_value = {
-            cov_name: np.quantile(coefs[:, self.cov_names.index(cov_name)], q)
-            for cov_name, q in slope_quantile.items()
-            if cov_name in self.cov_names
-        }
+        quantile_value = {}
+        for cov_name, q in slope_quantile.items():
+            if cov_name not in self.cov_names:
+                warn(f"{cov_name} not in the model, "
+                     f"ignore it in slope_quantile.")
+            else:
+                quantile_value[cov_name] = np.quantile(
+                    coefs[:, self.cov_names.index(cov_name)], q
+                )
         if mask_soln:
             masked_coefs = np.vstack([coefs, self.soln['mean']])
             for cov_name, v in quantile_value.items():
