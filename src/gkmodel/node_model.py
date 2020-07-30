@@ -218,15 +218,21 @@ class StudyModel(NodeModel):
                             for cov_model in self.cov_models])
         use_bounds = (not np.isneginf(bounds[:, 0]).all()) or \
             (not np.isposinf(bounds[:, 1]).all())
+        gprior = np.hstack([cov_model.prior_beta_gaussian
+                            for cov_model in self.cov_models])
+        if np.isinf(gprior[1]).all():
+            gprior = None
         for study_id in self.data.studies:
             index = self.data.study_id == study_id
             mat = self.mat[index, :]
             obs = self.data.obs[index]
             obs_se = self.data.obs_se[index]
             if use_bounds:
-                self.soln[study_id] = solve_ls_b(mat, obs, obs_se, bounds)
+                self.soln[study_id] = solve_ls_b(mat, obs, obs_se, bounds,
+                                                 gprior=gprior)
             else:
-                self.soln[study_id] = solve_ls(mat, obs, obs_se)
+                self.soln[study_id] = solve_ls(mat, obs, obs_se,
+                                               gprior=gprior)
 
         self.soln['mean'] = np.array(list(self.soln.values())).mean(axis=0)
 
