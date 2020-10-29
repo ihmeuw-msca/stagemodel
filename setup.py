@@ -10,15 +10,13 @@ if __name__ == '__main__':
     sys.path.insert(0, src_dir.as_posix())
     import __about__ as about
 
-    with (base_dir/'README.rst').open() as f:
+    with (base_dir/'README.md').open() as f:
         long_description = f.read()
 
     install_requirements = [
         'numpy',
         'pandas',
         'scipy',
-        'xspline',
-        'xarray'
     ]
 
     unsolved_requirements = [

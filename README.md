@@ -1,3 +1,4 @@
-# GoalKeeper2020
+# Stage Model
 
-### Visualization https://dry-plains-51858.herokuapp.com/
+This is a package for stage-wise model.
+Used for Goal Keepers 2020 project.
