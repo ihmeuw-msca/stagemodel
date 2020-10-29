@@ -17,12 +17,12 @@ if __name__ == '__main__':
         'numpy',
         'pandas',
         'scipy',
+        'mrtool'
     ]
 
     unsolved_requirements = [
         'ipopt',
         'limetr',
-        'mrtool',
     ]
 
     test_requirements = [
