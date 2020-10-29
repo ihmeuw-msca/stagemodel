@@ -3,8 +3,8 @@ __all__ = [
     "__email__", "__license__", "__copyright__",
 ]
 
-__title__ = "mrtool"
-__summary__ = "MRTool: Featured Nonlinear Mixed effects Models"
+__title__ = "stagemodel"
+__summary__ = "stagemodel: Stagewise models."
 __uri__ = "https://github.com/ihmeuw-msca/stagemodel"
 
 __version__ = "0.0.1"
