@@ -5,6 +5,7 @@
 from typing import List, Union, Dict, Tuple, Any
 import numpy as np
 import pandas as pd
+import xarray as xr
 from warnings import warn
 
 from mrtool import MRData, LinearCovModel, MRBRT
@@ -119,6 +120,37 @@ class NodeModel:
             np.ndarray: Prediction.
         """
         raise NotImplementedError()
+
+    def predict_from_xarray(self, covs: List[xr.DataArray], **kwargs) -> xr.DataArray:
+        """Predict from xarray
+
+        Args:
+            data (xr.Dataset): xarray dataset that contains all the covariates.
+
+        Returns:
+            xr.Dataset: prediction result
+        """
+        pred = self.predict_from_intercept(**kwargs)
+        for cov in covs:
+            pred = pred + self.predict_from_xarray_cov(cov, **kwargs)
+        return pred
+
+    def predict_from_xarray_cov(self, cov: xr.DataArray, **kwargs) -> xr.DataArray:
+        covs = {cov.name: cov.data.ravel()}
+        covs.update({
+            cov_name: np.zeros(cov.size)
+            for cov_name in self.cov_names if cov_name != cov.name
+        })
+        pred = self.predict(MRData(covs=covs), **kwargs).reshape(cov.shape)
+        return xr.DataArray(pred, name=f"pred_{cov.name}", coords=cov.coords, dims=cov.dims)
+
+    def predict_from_intercept(self, **kwargs) -> float:
+        covs = {"intercept": np.array([1.0])}
+        covs.update({
+            cov_name: np.zeros(1)
+            for cov_name in self.cov_names if cov_name != "intercept"
+        })
+        return self.predict(MRData(covs=covs), **kwargs)[0]
 
     def soln_to_df(self, path: Union[str, None] = None) -> pd.DataFrame:
         """Write the soln to the path.
