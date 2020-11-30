@@ -99,19 +99,31 @@ class NodeModel:
             np.ndarray: Design matrix.
         """
         data = self.data if data is None else data
+        assert isinstance(data, MRData)
         return np.hstack([cov_model.create_design_mat(data)[0]
                           for cov_model in self.cov_models])
+
+    def create_design_mat_from_xarray(self, covs: List[xr.DataArray]) -> np.ndarray:
+        da = xr.merge(covs).to_array()
+        data = MRData({
+            cov: da.values[i].ravel()
+            for i, cov in enumerate(da.coords["variables"].values)
+        })
+        del da.coords["variable"]
+        return self.create_design_mat(data), da.coords, da.dims
 
     def fit_model(self):
         """Fit the model.
         """
         raise NotImplementedError()
 
-    def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
+    def predict(self,
+                data: Union[MRData, List[xr.DataArray]] = None,
+                **kwargs) -> Union[np.ndarray, xr.DataArray]:
         """Predict from fitting result.
 
         Args:
-            data (MRData, optional):
+            data (Union[MRData, List[xr.DataArray]], optional):
                 Given data object to predict, if ``None`` use the attribute
                 ``self.data`` Defaults to None.
             kwargs (Dict): Other keyword arguments.
@@ -120,37 +132,6 @@ class NodeModel:
             np.ndarray: Prediction.
         """
         raise NotImplementedError()
-
-    def predict_from_xarray(self, covs: List[xr.DataArray], **kwargs) -> xr.DataArray:
-        """Predict from xarray
-
-        Args:
-            data (xr.Dataset): xarray dataset that contains all the covariates.
-
-        Returns:
-            xr.Dataset: prediction result
-        """
-        pred = self.predict_from_intercept(**kwargs)
-        for cov in covs:
-            pred = pred + self.predict_from_xarray_cov(cov, **kwargs)
-        return pred
-
-    def predict_from_xarray_cov(self, cov: xr.DataArray, **kwargs) -> xr.DataArray:
-        covs = {cov.name: cov.data.ravel()}
-        covs.update({
-            cov_name: np.zeros(cov.size)
-            for cov_name in self.cov_names if cov_name != cov.name
-        })
-        pred = self.predict(MRData(covs=covs), **kwargs).reshape(cov.shape)
-        return xr.DataArray(pred, name=f"pred_{cov.name}", coords=cov.coords, dims=cov.dims)
-
-    def predict_from_intercept(self, **kwargs) -> float:
-        covs = {"intercept": np.array([1.0])}
-        covs.update({
-            cov_name: np.zeros(1)
-            for cov_name in self.cov_names if cov_name != "intercept"
-        })
-        return self.predict(MRData(covs=covs), **kwargs)[0]
 
     def soln_to_df(self, path: Union[str, None] = None) -> pd.DataFrame:
         """Write the soln to the path.
@@ -213,14 +194,24 @@ class OverallModel(NodeModel):
         model.fit_model(**fit_options)
         self.soln = model.beta_soln
 
-    def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
+    def predict(self,
+                data: Union[MRData, List[xr.DataArray]] = None,
+                **kwargs) -> Union[np.ndarray, xr.DataArray]:
         """Predict from fitting result.
         """
         self._assert_has_soln()
         data = self.data if data is None else data
-        data._sort_by_data_id()
-        mat = self.create_design_mat(data)
-        return mat.dot(self.soln)
+        if isinstance(data, MRData):
+            data._sort_by_data_id()
+            mat = self.create_design_mat(data)
+            pred = mat.dot(self.soln)
+        else:
+            mat, coords, dims = self.create_design_mat_from_xarray(data)
+            pred = xr.DataArray(mat.dot(self.soln),
+                                coords=coords,
+                                dims=dims)
+
+        return pred
 
     def soln_to_df(self, path: str = None) -> pd.DataFrame:
         """Write solution.
@@ -270,11 +261,11 @@ class StudyModel(NodeModel):
 
     def predict(
         self,
-        data: MRData = None,
+        data: Union[MRData, List[xr.DataArray]] = None,
         slope_quantile: Dict[str, float] = None,
         ref_cov: Tuple[str, Any] = None,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> Union[np.ndarray, xr.DataArray]:
         """Predict from fitting result.
 
         Args:
@@ -285,7 +276,11 @@ class StudyModel(NodeModel):
         """
         self._assert_has_soln()
         data = self.data if data is None else data
-        data._sort_by_data_id()
+        if isinstance(data, MRData):
+            data._sort_by_data_id()
+            mat = self.create_design_mat(data)
+        else:
+            mat, coords, dims = self.create_design_mat_from_xarray(data)
 
         mat = self.mat if data is None else self.create_design_mat(data)
 
@@ -311,8 +306,11 @@ class StudyModel(NodeModel):
                 intercept_shift[study_id] = np.mean(sub_mat.dot(self.soln[study_name] - soln[study_name]))
 
         shifts = np.array([intercept_shift[study_id] for study_id in data.study_id])
+        pred = np.sum(mat*coefs, axis=1) + shifts
+        if not isinstance(data, MRData):
+            pred = xr.DataArray(pred, coords=coords, dims=dims)
 
-        return np.sum(mat*coefs, axis=1) + shifts
+        return pred
 
     def get_soln_quantile(self,
                           slope_quantile: Dict[str, float],
