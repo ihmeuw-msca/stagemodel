@@ -5,6 +5,7 @@
 from pathlib import Path
 from typing import List, Dict, Tuple, Any
 import numpy as np
+import xarray as xr
 from copy import deepcopy
 
 from mrtool import MRData, LinearCovModel
@@ -48,6 +49,18 @@ class StagewiseModel:
         pred = np.zeros(data.num_obs)
         for model in self.node_models:
             pred += model.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
+        return pred
+    
+    def predict_from_xarray(
+        self,
+        covs: List[xr.DataArray],
+        slope_quantile: Dict[str, float] = None,
+        ref_cov: Tuple[str, Any] = None,
+    ):
+        pred = self.node_models[0].predict_from_xarray(covs, slope_quantile=slope_quantile, ref_cov=ref_cov)
+        if len(self.node_models) > 1:
+            for model in self.node_models[1:]:
+                pred += model.predict_from_xarray(covs, slope_quantile=slope_quantile, ref_cov=ref_cov)
         return pred
 
     def soln_to_df(self, i: int, path: str = None):
