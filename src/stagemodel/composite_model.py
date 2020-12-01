@@ -45,7 +45,6 @@ class StagewiseModel:
     ) -> Union[np.ndarray, xr.DataArray]:
         if data is None:
             data = self.data_list[0]
-        data._sort_by_data_id()
         pred = np.zeros(data.num_obs)
         for model in self.node_models:
             pred += model.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
