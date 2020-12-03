@@ -49,7 +49,7 @@ class StagewiseModel:
             pred_size = data.num_obs
         else:
             pred_size = max([cov.size for cov in data])
-        pred = np.zeros(data.num_obs)
+        pred = np.zeros(pred_size)
         for model in self.node_models:
             pred += model.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
         return pred
