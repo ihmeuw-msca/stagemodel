@@ -111,7 +111,7 @@ class NodeModel:
             for i, cov in enumerate(da.coords[var_coord].values)
         })
         del da.coords[var_coord]
-        return self.create_design_mat(data), da.coords, da.dims
+        return self.create_design_mat(data), da[0].coords, da[0].dims, da[0].shape
 
     def fit_model(self):
         """Fit the model.
@@ -207,8 +207,8 @@ class OverallModel(NodeModel):
             mat = self.create_design_mat(data)
             pred = mat.dot(self.soln)
         else:
-            mat, coords, dims = self.create_design_mat_from_xarray(data)
-            pred = xr.DataArray(mat.dot(self.soln),
+            mat, coords, dims, shape = self.create_design_mat_from_xarray(data)
+            pred = xr.DataArray(mat.dot(self.soln).reshape(shape),
                                 coords=coords,
                                 dims=dims)
 
