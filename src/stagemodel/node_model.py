@@ -104,12 +104,13 @@ class NodeModel:
                           for cov_model in self.cov_models])
 
     def create_design_mat_from_xarray(self, covs: List[xr.DataArray]) -> np.ndarray:
+        var_coord = "variable" if len(covs) == 1 else "variables"
         da = xr.merge(covs).to_array()
         data = MRData({
             cov: da.values[i].ravel()
-            for i, cov in enumerate(da.coords["variables"].values)
+            for i, cov in enumerate(da.coords[var_coord].values)
         })
-        del da.coords["variable"]
+        del da.coords[var_coord]
         return self.create_design_mat(data), da.coords, da.dims
 
     def fit_model(self):
