@@ -106,7 +106,7 @@ class NodeModel:
     def create_design_mat_from_xarray(self, covs: List[xr.DataArray]) -> np.ndarray:
         var_coord = "variable" if len(covs) == 1 else "variables"
         da = xr.merge(covs).to_array()
-        data = MRData({
+        data = MRData(covs={
             cov: da.values[i].ravel()
             for i, cov in enumerate(da.coords[var_coord].values)
         })
