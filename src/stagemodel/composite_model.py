@@ -45,12 +45,8 @@ class StagewiseModel:
     ) -> Union[np.ndarray, xr.DataArray]:
         if data is None:
             data = self.data_list[0]
-        if isinstance(data, MRData):
-            pred_size = data.num_obs
-        else:
-            pred_size = max([cov.size for cov in data])
-        pred = np.zeros(pred_size)
-        for model in self.node_models:
+        pred = self.node_models[0].predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
+        for model in self.node_models[1:]:
             pred += model.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
         return pred
 
