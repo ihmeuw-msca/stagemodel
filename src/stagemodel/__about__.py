@@ -7,7 +7,7 @@ __title__ = "stagemodel"
 __summary__ = "stagemodel: Stagewise models."
 __uri__ = "https://github.com/ihmeuw-msca/stagemodel"
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 __author__ = "IHME Math Sciences"
 __email__ = "ihme.math.sciences@gmail.com"
