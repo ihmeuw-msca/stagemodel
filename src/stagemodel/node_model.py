@@ -104,7 +104,7 @@ class NodeModel:
                           for cov_model in self.cov_models])
 
     def create_design_mat_from_xarray(self, covs: List[xr.DataArray]) -> np.ndarray:
-        var_coord = "variable" if len(covs) == 1 else "variables"
+        var_coord = "variable"
         for cov in covs:
             if "year_id" in cov.coords:
                 year_id = cov.year_id
