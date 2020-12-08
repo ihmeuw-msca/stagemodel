@@ -105,11 +105,17 @@ class NodeModel:
 
     def create_design_mat_from_xarray(self, covs: List[xr.DataArray]) -> np.ndarray:
         var_coord = "variable" if len(covs) == 1 else "variables"
+        for cov in covs:
+            if "year_id" in cov.coords:
+                year_id = cov.year_id
+                year_id.name = "year_id_"
+                covs.append(year_id)
+                break
         da = xr.merge(covs).to_array()
-        data = MRData(covs={
-            cov: da.values[i].ravel()
+        covs_dict = {
+            cov.strip("_"): da.values[i].ravel()
             for i, cov in enumerate(da.coords[var_coord].values)
-        })
+        }
         del da.coords[var_coord]
         return self.create_design_mat(data), da[0].coords, da[0].dims, da[0].shape
 
