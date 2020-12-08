@@ -16,6 +16,7 @@ if __name__ == '__main__':
     install_requirements = [
         'numpy',
         'pandas',
+        'xarray',
         'scipy',
         'mrtool'
     ]

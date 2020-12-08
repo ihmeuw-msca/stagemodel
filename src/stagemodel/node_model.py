@@ -5,6 +5,7 @@
 from typing import List, Union, Dict, Tuple, Any
 import numpy as np
 import pandas as pd
+import xarray as xr
 from warnings import warn
 
 from mrtool import MRData, LinearCovModel, MRBRT
@@ -98,19 +99,38 @@ class NodeModel:
             np.ndarray: Design matrix.
         """
         data = self.data if data is None else data
+        assert isinstance(data, MRData)
         return np.hstack([cov_model.create_design_mat(data)[0]
                           for cov_model in self.cov_models])
+
+    def create_design_mat_from_xarray(self, covs: List[xr.DataArray]) -> np.ndarray:
+        var_coord = "variable"
+        for cov in covs:
+            if "year_id" in cov.coords:
+                year_id = cov.year_id
+                year_id.name = "year_id_"
+                covs.append(year_id)
+                break
+        da = xr.merge(covs).to_array()
+        data = MRData(covs={
+            cov.strip("_"): da.values[i].ravel()
+            for i, cov in enumerate(da.coords[var_coord].values)
+        })
+        del da.coords[var_coord]
+        return self.create_design_mat(data), da[0].coords, da[0].dims, da[0].shape
 
     def fit_model(self):
         """Fit the model.
         """
         raise NotImplementedError()
 
-    def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
+    def predict(self,
+                data: Union[MRData, List[xr.DataArray]] = None,
+                **kwargs) -> Union[np.ndarray, xr.DataArray]:
         """Predict from fitting result.
 
         Args:
-            data (MRData, optional):
+            data (Union[MRData, List[xr.DataArray]], optional):
                 Given data object to predict, if ``None`` use the attribute
                 ``self.data`` Defaults to None.
             kwargs (Dict): Other keyword arguments.
@@ -181,14 +201,24 @@ class OverallModel(NodeModel):
         model.fit_model(**fit_options)
         self.soln = model.beta_soln
 
-    def predict(self, data: MRData = None, **kwargs) -> np.ndarray:
+    def predict(self,
+                data: Union[MRData, List[xr.DataArray]] = None,
+                **kwargs) -> Union[np.ndarray, xr.DataArray]:
         """Predict from fitting result.
         """
         self._assert_has_soln()
         data = self.data if data is None else data
-        data._sort_by_data_id()
-        mat = self.create_design_mat(data)
-        return mat.dot(self.soln)
+        if isinstance(data, MRData):
+            data._sort_by_data_id()
+            mat = self.create_design_mat(data)
+            pred = mat.dot(self.soln)
+        else:
+            mat, coords, dims, shape = self.create_design_mat_from_xarray(data)
+            pred = xr.DataArray(mat.dot(self.soln).reshape(shape),
+                                coords=coords,
+                                dims=dims)
+
+        return pred
 
     def soln_to_df(self, path: str = None) -> pd.DataFrame:
         """Write solution.
@@ -238,11 +268,11 @@ class StudyModel(NodeModel):
 
     def predict(
         self,
-        data: MRData = None,
+        data: Union[MRData, List[xr.DataArray]] = None,
         slope_quantile: Dict[str, float] = None,
         ref_cov: Tuple[str, Any] = None,
         **kwargs,
-    ) -> np.ndarray:
+    ) -> Union[np.ndarray, xr.DataArray]:
         """Predict from fitting result.
 
         Args:
@@ -253,34 +283,43 @@ class StudyModel(NodeModel):
         """
         self._assert_has_soln()
         data = self.data if data is None else data
-        data._sort_by_data_id()
-
-        mat = self.mat if data is None else self.create_design_mat(data)
+        if isinstance(data, MRData):
+            data._sort_by_data_id()
+            mat = self.create_design_mat(data)
+        else:
+            mat, coords, dims, shape = self.create_design_mat_from_xarray(data)
 
         if slope_quantile is not None:
             _, soln = self.get_soln_quantile(slope_quantile, mask_soln=True)
         else:
             soln = self.soln
 
-        coefs = np.vstack([
-            soln[study_id]
-            if study_id in self.data.studies else soln['mean']
-            for study_id in data.study_id
-        ])
+        if isinstance(data, MRData):
+            coefs = np.vstack([
+                soln[study_id]
+                if study_id in self.data.studies else soln['mean']
+                for study_id in data.study_id
+            ])
+            intercept_shift = {study_id: 0.0 for study_id in data.studies}
+            if ref_cov is not None:
+                for study_id in data.studies:
+                    sub_mat = mat[(data.study_id == study_id) &
+                                  (data.covs[ref_cov[0]] == ref_cov[1])]
+                    if sub_mat.shape[0] != 1:
+                        warn(f'Multiple ref value for study {study_id} found. Using mean instead.')
+                    study_name = study_id if study_id in self.data.studies else 'mean'
+                    intercept_shift[study_id] = np.mean(sub_mat.dot(self.soln[study_name] - soln[study_name]))
 
-        intercept_shift = {study_id: 0.0 for study_id in data.studies}
-        if ref_cov is not None:
-            for study_id in data.studies:
-                sub_mat = mat[(data.study_id == study_id) &
-                              (data.covs[ref_cov[0]] == ref_cov[1])]
-                if sub_mat.shape[0] != 1:
-                    warn(f'Multiple ref value for study {study_id} found. Using mean instead.')
-                study_name = study_id if study_id in self.data.studies else 'mean'
-                intercept_shift[study_id] = np.mean(sub_mat.dot(self.soln[study_name] - soln[study_name]))
+            shifts = np.array([intercept_shift[study_id] for study_id in data.study_id])
+        else:
+            coefs = np.vstack([soln['mean']]*mat.shape[0])
+            shifts = 0.0
 
-        shifts = np.array([intercept_shift[study_id] for study_id in data.study_id])
+        pred = np.sum(mat*coefs, axis=1) + shifts
+        if not isinstance(data, MRData):
+            pred = xr.DataArray(pred.reshape(shape), coords=coords, dims=dims)
 
-        return np.sum(mat*coefs, axis=1) + shifts
+        return pred
 
     def get_soln_quantile(self,
                           slope_quantile: Dict[str, float],
