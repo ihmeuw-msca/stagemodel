@@ -46,8 +46,9 @@ class StagewiseModel:
         if data is None:
             data = self.data_list[0]
         pred = self.node_models[0].predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
-        for model in self.node_models[1:]:
-            pred += model.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
+        if len(self.node_models) > 1:
+            for model in self.node_models[1:]:
+                pred += model.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
         return pred
 
     def soln_to_df(self, i: int, path: str = None):
