@@ -112,10 +112,10 @@ class NodeModel:
                 covs.append(year_id)
                 break
         da = xr.merge(covs).to_array()
-        covs_dict = {
+        data = MRData(covs={
             cov.strip("_"): da.values[i].ravel()
             for i, cov in enumerate(da.coords[var_coord].values)
-        }
+        })
         del da.coords[var_coord]
         return self.create_design_mat(data), da[0].coords, da[0].dims, da[0].shape
 
