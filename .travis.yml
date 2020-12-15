@@ -5,12 +5,3 @@ install:
 - pip install .
 script:
 - pytest tests
-# deploy:
-#   provider: pypi
-#   username: __token__
-#   password:
-#     secure: Si6bGvGRZPQS/RZ+dSDCEwObndCL+Yhw8HZzzD44bLE4kSP4Di96rb0Ra/J14ZRUQBHcwm614n6PYmZK5yGsgWpZeeF209bTN2PfIKghc7WoArP5CIU46fnqejhC0ISmbKEsgxbtO+JaYT6iYvAkV26nssMqICe9BAwdX9DhbegKJ2bf3hBcIZoLT70V4jMDk/ulQbCAJzhayiC0pGno7+aZm4rQwO0ga670F49tNEPGW9hE7hirS8J3bkB6a6qL05lLaF+CS3ZsultXtlsKXs2SpcrxevcKTFKcdhR04tgTmXFEUemFLYR41LTa2XDmx0PHA0Ah6GdQeqZVc5cch1/+zPVGsgk51DOmCp+2+rKhLeEYoHYj5hy4oC5fm57ET7xY9bEpRwUApCHU5U7SOCw0SVR0eoLeFMl5bP7+VbW+qUesds0j9cHk0nUFJgb4GbQv4bsR67Y8PMXvqctu4WY044MQtnscAjpuvNYLjI53emZ9bm5oYqW5iIfQzJ1nl0JZZXXz3fuFn1UPsuTl/aT5EubjJdhoyAGulPiHTnMkXtyqop2EJIE0iuiI2OL2cYBtqbJYk3HmKtvRRSvru2P9JFg/ktcbdyhSPUJkQZrHpvkw4SZb3Obdso9TbXmLORj4qpErzbzlVSdf8d1sp5RPlPA+KA+msNue5tZtzJc=
-#   on:
-#     branch: master
-#     repo: ihmeuw-msca/stagemodel
-#     tags: true
