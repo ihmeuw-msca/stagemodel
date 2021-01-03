@@ -119,6 +119,12 @@ class NodeModel:
         del da.coords[var_coord]
         return self.create_design_mat(data), da[0].coords, da[0].dims, da[0].shape
 
+    @staticmethod
+    def get_study_ids_from_xarray(covs: List[xr.DataArray],
+                                  coord_name: str = "location_id") -> np.ndarray:
+        cov = covs[np.argmax([cov.size for cov in covs])]
+        return cov.coords.to_index().to_frame(index=False)[coord_name].to_numpy()
+
     def fit_model(self):
         """Fit the model.
         """
@@ -286,35 +292,32 @@ class StudyModel(NodeModel):
         if isinstance(data, MRData):
             data._sort_by_data_id()
             mat = self.create_design_mat(data)
+            study_ids = data.study_id
         else:
             mat, coords, dims, shape = self.create_design_mat_from_xarray(data)
+            study_ids = self.get_study_ids_from_xarray(data)
 
         if slope_quantile is not None:
             _, soln = self.get_soln_quantile(slope_quantile, mask_soln=True)
         else:
             soln = self.soln
 
-        if isinstance(data, MRData):
-            coefs = np.vstack([
-                soln[study_id]
-                if study_id in self.data.studies else soln['mean']
-                for study_id in data.study_id
-            ])
-            intercept_shift = {study_id: 0.0 for study_id in data.studies}
-            if ref_cov is not None:
-                for study_id in data.studies:
-                    sub_mat = mat[(data.study_id == study_id) &
-                                  (data.covs[ref_cov[0]] == ref_cov[1])]
-                    if sub_mat.shape[0] != 1:
-                        warn(f'Multiple ref value for study {study_id} found. Using mean instead.')
-                    study_name = study_id if study_id in self.data.studies else 'mean'
-                    intercept_shift[study_id] = np.mean(sub_mat.dot(self.soln[study_name] - soln[study_name]))
+        coefs = np.vstack([
+            soln[study_id]
+            if study_id in self.data.studies else soln['mean']
+            for study_id in study_ids
+        ])
+        intercept_shift = {study_id: 0.0 for study_id in study_ids}
+        if ref_cov is not None:
+            for study_id in data.studies:
+                sub_mat = mat[(data.study_id == study_id) &
+                              (data.covs[ref_cov[0]] == ref_cov[1])]
+                if sub_mat.shape[0] != 1:
+                    warn(f'Multiple ref value for study {study_id} found. Using mean instead.')
+                study_name = study_id if study_id in self.data.studies else 'mean'
+                intercept_shift[study_id] = np.mean(sub_mat.dot(self.soln[study_name] - soln[study_name]))
 
-            shifts = np.array([intercept_shift[study_id] for study_id in data.study_id])
-        else:
-            coefs = np.vstack([soln['mean']]*mat.shape[0])
-            shifts = 0.0
-
+        shifts = np.array([intercept_shift[study_id] for study_id in study_ids])
         pred = np.sum(mat*coefs, axis=1) + shifts
         if not isinstance(data, MRData):
             pred = xr.DataArray(pred.reshape(shape), coords=coords, dims=dims)
