@@ -293,9 +293,13 @@ class StudyModel(NodeModel):
             data._sort_by_data_id()
             mat = self.create_design_mat(data)
             study_ids = data.study_id
+            if ref_cov is not None:
+                ref_cov_values = data.covs[ref_cov[0]]
         else:
             mat, coords, dims, shape = self.create_design_mat_from_xarray(data)
             study_ids = self.get_study_ids_from_xarray(data)
+            if ref_cov is not None:
+                ref_cov_values = self.get_study_ids_from_xarray(data, coord_name=ref_cov[0])
 
         if slope_quantile is not None:
             _, soln = self.get_soln_quantile(slope_quantile, mask_soln=True)
@@ -309,12 +313,12 @@ class StudyModel(NodeModel):
         ])
         intercept_shift = {study_id: 0.0 for study_id in study_ids}
         if ref_cov is not None:
-            for study_id in data.studies:
-                sub_mat = mat[(data.study_id == study_id) &
-                              (data.covs[ref_cov[0]] == ref_cov[1])]
+            for study_id in np.unique(study_ids):
+                sub_mat = mat[(study_ids == study_id) &
+                              (ref_cov_values == ref_cov[1])]
                 if sub_mat.shape[0] != 1:
                     warn(f'Multiple ref value for study {study_id} found. Using mean instead.')
-                study_name = study_id if study_id in self.data.studies else 'mean'
+                study_name = study_id if study_id in study_ids else 'mean'
                 intercept_shift[study_id] = np.mean(sub_mat.dot(self.soln[study_name] - soln[study_name]))
 
         shifts = np.array([intercept_shift[study_id] for study_id in study_ids])
