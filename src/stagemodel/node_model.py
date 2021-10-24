@@ -289,6 +289,7 @@ class StudyModel(NodeModel):
         """
         self._assert_has_soln()
         data = self.data if data is None else data
+        df = self.data.to_df()
         if isinstance(data, MRData):
             data._sort_by_data_id()
             mat = self.create_design_mat(data)
@@ -316,11 +317,11 @@ class StudyModel(NodeModel):
             for study_id in np.unique(study_ids):
                 sub_mat = mat[(study_ids == study_id) &
                               (ref_cov_values == ref_cov[1])]
+                ref_value = df.loc[(df.study_id == study_id) & (df[ref_cov[0]] == ref_cov[1]), "obs"].values[0]
                 if sub_mat.shape[0] != 1:
                     warn(f'Multiple ref value for study {study_id} found. Using mean instead.')
                 study_name = study_id if study_id in study_ids else 'mean'
-                intercept_shift[study_id] = np.mean(sub_mat.dot(self.soln[study_name] - soln[study_name]))
-
+                intercept_shift[study_id] = np.mean(ref_value - sub_mat.dot(soln[study_name]))
         shifts = np.array([intercept_shift[study_id] for study_id in study_ids])
         pred = np.sum(mat*coefs, axis=1) + shifts
         if not isinstance(data, MRData):
