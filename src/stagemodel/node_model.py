@@ -2,24 +2,21 @@
     model
     ~~~~~
 """
-from typing import List, Union, Dict, Tuple, Any
+from typing import Any, Dict, List, Tuple, Union
+from warnings import warn
+
 import numpy as np
 import pandas as pd
 import xarray as xr
-from warnings import warn
+from mrtool import MRBRT, LinearCovModel, MRData
 
-from mrtool import MRData, LinearCovModel, MRBRT
-
-from .utils import solve_ls, solve_ls_b, result_to_df
+from .utils import result_to_df, solve_ls, solve_ls_b
 
 
 class NodeModel:
-    """Node model that carries independent task.
-    """
+    """Node model that carries independent task."""
 
-    def __init__(self,
-                 data: MRData = None,
-                 cov_models: List[LinearCovModel] = None):
+    def __init__(self, data: MRData = None, cov_models: List[LinearCovModel] = None):
         """Constructor of the NodeModel.
 
         Args:
@@ -31,7 +28,9 @@ class NodeModel:
                 intercept model will be added. Default to ``None``.
         """
         self.data = None
-        self.cov_models = [LinearCovModel('intercept')] if cov_models is None else cov_models
+        self.cov_models = (
+            [LinearCovModel("intercept")] if cov_models is None else cov_models
+        )
         self.cov_names = self.get_cov_names()
         self.mat = None
         self.soln = None
@@ -69,8 +68,7 @@ class NodeModel:
         if self.soln is None:
             raise ValueError("Must fit model!")
 
-    def get_cov_names(self,
-                      cov_models: List[LinearCovModel] = None) -> List[str]:
+    def get_cov_names(self, cov_models: List[LinearCovModel] = None) -> List[str]:
         """Get covariates names.
 
         Args:
@@ -100,8 +98,9 @@ class NodeModel:
         """
         data = self.data if data is None else data
         assert isinstance(data, MRData)
-        return np.hstack([cov_model.create_design_mat(data)[0]
-                          for cov_model in self.cov_models])
+        return np.hstack(
+            [cov_model.create_design_mat(data)[0] for cov_model in self.cov_models]
+        )
 
     def create_design_mat_from_xarray(self, covs: List[xr.DataArray]) -> np.ndarray:
         var_coord = "variable"
@@ -112,27 +111,29 @@ class NodeModel:
                 covs.append(year_id)
                 break
         da = xr.merge(covs).to_array()
-        data = MRData(covs={
-            cov.strip("_"): da.values[i].ravel()
-            for i, cov in enumerate(da.coords[var_coord].values)
-        })
+        data = MRData(
+            covs={
+                cov.strip("_"): da.values[i].ravel()
+                for i, cov in enumerate(da.coords[var_coord].values)
+            }
+        )
         del da.coords[var_coord]
         return self.create_design_mat(data), da[0].coords, da[0].dims, da[0].shape
 
     @staticmethod
-    def get_study_ids_from_xarray(covs: List[xr.DataArray],
-                                  coord_name: str = "location_id") -> np.ndarray:
+    def get_study_ids_from_xarray(
+        covs: List[xr.DataArray], coord_name: str = "location_id"
+    ) -> np.ndarray:
         cov = covs[np.argmax([cov.size for cov in covs])]
         return cov.coords.to_index().to_frame(index=False)[coord_name].to_numpy()
 
     def fit_model(self):
-        """Fit the model.
-        """
+        """Fit the model."""
         raise NotImplementedError()
 
-    def predict(self,
-                data: Union[MRData, List[xr.DataArray]] = None,
-                **kwargs) -> Union[np.ndarray, xr.DataArray]:
+    def predict(
+        self, data: Union[MRData, List[xr.DataArray]] = None, **kwargs
+    ) -> Union[np.ndarray, xr.DataArray]:
         """Predict from fitting result.
 
         Args:
@@ -160,10 +161,12 @@ class NodeModel:
         """
         raise NotImplementedError()
 
-    def result_to_df(self,
-                     path: str = None,
-                     prediction: str = 'prediction',
-                     residual: str = 'residual') -> pd.DataFrame:
+    def result_to_df(
+        self,
+        path: str = None,
+        prediction: str = "prediction",
+        residual: str = "residual",
+    ) -> pd.DataFrame:
         """Create result data frame.
 
         Args:
@@ -181,8 +184,9 @@ class NodeModel:
         """
         self._assert_has_data()
         self._assert_has_soln()
-        return result_to_df(self, self.data,
-                            path=path, prediction=prediction, residual=residual)
+        return result_to_df(
+            self, self.data, path=path, prediction=prediction, residual=residual
+        )
 
 
 class OverallModel(NodeModel):
@@ -191,8 +195,7 @@ class OverallModel(NodeModel):
     """
 
     def fit_model(self, **fit_options):
-        """Fit the model
-        """
+        """Fit the model"""
         self._assert_has_data()
         beta_init = solve_ls(self.mat, self.data.obs, self.data.obs_se)
         model = MRBRT(self.data, self.cov_models)
@@ -200,18 +203,15 @@ class OverallModel(NodeModel):
 
         default_fit_options = dict(
             x0=np.hstack((beta_init, gamma_init)),
-            inner_max_iter=500,
-            inner_print_level=5,
         )
         fit_options = {**default_fit_options, **fit_options}
         model.fit_model(**fit_options)
         self.soln = model.beta_soln
 
-    def predict(self,
-                data: Union[MRData, List[xr.DataArray]] = None,
-                **kwargs) -> Union[np.ndarray, xr.DataArray]:
-        """Predict from fitting result.
-        """
+    def predict(
+        self, data: Union[MRData, List[xr.DataArray]] = None, **kwargs
+    ) -> Union[np.ndarray, xr.DataArray]:
+        """Predict from fitting result."""
         self._assert_has_soln()
         data = self.data if data is None else data
         if isinstance(data, MRData):
@@ -220,42 +220,42 @@ class OverallModel(NodeModel):
             pred = mat.dot(self.soln)
         else:
             mat, coords, dims, shape = self.create_design_mat_from_xarray(data)
-            pred = xr.DataArray(mat.dot(self.soln).reshape(shape),
-                                coords=coords,
-                                dims=dims)
+            pred = xr.DataArray(
+                mat.dot(self.soln).reshape(shape), coords=coords, dims=dims
+            )
 
         return pred
 
     def soln_to_df(self, path: str = None) -> pd.DataFrame:
-        """Write solution.
-        """
+        """Write solution."""
         names = []
         for cov_model in self.cov_models:
-            names.extend([cov_model.name + '_' + str(i)
-                          for i in range(cov_model.num_x_vars)])
+            names.extend(
+                [cov_model.name + "_" + str(i) for i in range(cov_model.num_x_vars)]
+            )
         assert len(names) == len(self.soln)
-        df = pd.DataFrame(list(zip(names, self.soln)),
-                          columns=['name', 'value'])
+        df = pd.DataFrame(list(zip(names, self.soln)), columns=["name", "value"])
         if path is not None:
             df.to_csv(path)
         return df
 
 
 class StudyModel(NodeModel):
-    """Study specific Model.
-    """
+    """Study specific Model."""
 
     def fit_model(self):
-        """Fit the model.
-        """
+        """Fit the model."""
         self._assert_has_data()
         self.soln = {}
-        bounds = np.vstack([cov_model.prior_beta_uniform.T
-                            for cov_model in self.cov_models])
-        use_bounds = (not np.isneginf(bounds[:, 0]).all()) or \
-            (not np.isposinf(bounds[:, 1]).all())
-        gprior = np.hstack([cov_model.prior_beta_gaussian
-                            for cov_model in self.cov_models])
+        bounds = np.vstack(
+            [cov_model.prior_beta_uniform.T for cov_model in self.cov_models]
+        )
+        use_bounds = (not np.isneginf(bounds[:, 0]).all()) or (
+            not np.isposinf(bounds[:, 1]).all()
+        )
+        gprior = np.hstack(
+            [cov_model.prior_beta_gaussian for cov_model in self.cov_models]
+        )
         if np.isinf(gprior[1]).all():
             gprior = None
         for study_id in self.data.studies:
@@ -264,13 +264,13 @@ class StudyModel(NodeModel):
             obs = self.data.obs[index]
             obs_se = self.data.obs_se[index]
             if use_bounds:
-                self.soln[study_id] = solve_ls_b(mat, obs, obs_se, bounds,
-                                                 gprior=gprior)
+                self.soln[study_id] = solve_ls_b(
+                    mat, obs, obs_se, bounds, gprior=gprior
+                )
             else:
-                self.soln[study_id] = solve_ls(mat, obs, obs_se,
-                                               gprior=gprior)
+                self.soln[study_id] = solve_ls(mat, obs, obs_se, gprior=gprior)
 
-        self.soln['mean'] = np.array(list(self.soln.values())).mean(axis=0)
+        self.soln["mean"] = np.array(list(self.soln.values())).mean(axis=0)
 
     def predict(
         self,
@@ -300,39 +300,46 @@ class StudyModel(NodeModel):
             mat, coords, dims, shape = self.create_design_mat_from_xarray(data)
             study_ids = self.get_study_ids_from_xarray(data)
             if ref_cov is not None:
-                ref_cov_values = self.get_study_ids_from_xarray(data, coord_name=ref_cov[0])
+                ref_cov_values = self.get_study_ids_from_xarray(
+                    data, coord_name=ref_cov[0]
+                )
 
         if slope_quantile is not None:
             _, soln = self.get_soln_quantile(slope_quantile, mask_soln=True)
         else:
             soln = self.soln
 
-        coefs = np.vstack([
-            soln[study_id]
-            if study_id in self.data.studies else soln['mean']
-            for study_id in study_ids
-        ])
+        coefs = np.vstack(
+            [
+                soln[study_id] if study_id in self.data.studies else soln["mean"]
+                for study_id in study_ids
+            ]
+        )
         intercept_shift = {study_id: 0.0 for study_id in study_ids}
         if ref_cov is not None:
             for study_id in np.unique(study_ids):
-                sub_mat = mat[(study_ids == study_id) &
-                              (ref_cov_values == ref_cov[1])]
-                ref_value = df.loc[(df.study_id == study_id) & (df[ref_cov[0]] == ref_cov[1]), "obs"].values[0]
+                sub_mat = mat[(study_ids == study_id) & (ref_cov_values == ref_cov[1])]
+                ref_value = df.loc[
+                    (df.study_id == study_id) & (df[ref_cov[0]] == ref_cov[1]), "obs"
+                ].values[0]
                 if sub_mat.shape[0] != 1:
-                    warn(f'Multiple ref value for study {study_id} found. Using mean instead.')
-                study_name = study_id if study_id in study_ids else 'mean'
-                intercept_shift[study_id] = np.mean(ref_value - sub_mat.dot(soln[study_name]))
+                    warn(
+                        f"Multiple ref value for study {study_id} found. Using mean instead."
+                    )
+                study_name = study_id if study_id in study_ids else "mean"
+                intercept_shift[study_id] = np.mean(
+                    ref_value - sub_mat.dot(soln[study_name])
+                )
         shifts = np.array([intercept_shift[study_id] for study_id in study_ids])
-        pred = np.sum(mat*coefs, axis=1) + shifts
+        pred = np.sum(mat * coefs, axis=1) + shifts
         if not isinstance(data, MRData):
             pred = xr.DataArray(pred.reshape(shape), coords=coords, dims=dims)
 
         return pred
 
-    def get_soln_quantile(self,
-                          slope_quantile: Dict[str, float],
-                          mask_soln: bool = False) -> Union[Dict[str, float],
-                                                            Tuple[Dict[str, float], Dict[Any, np.ndarray]]]:
+    def get_soln_quantile(
+        self, slope_quantile: Dict[str, float], mask_soln: bool = False
+    ) -> Union[Dict[str, float], Tuple[Dict[str, float], Dict[Any, np.ndarray]]]:
         """Get solution quantile
 
         Args:
@@ -344,19 +351,17 @@ class StudyModel(NodeModel):
             Union[Dict[str, float], Tuple[Dict[str, float], Dict[Any, np.ndarray]]]:
                 Quantile of the solution or with the masked solution.
         """
-        coefs = np.array([self.soln[study_id]
-                          for study_id in self.data.studies])
+        coefs = np.array([self.soln[study_id] for study_id in self.data.studies])
         quantile_value = {}
         for cov_name, q in slope_quantile.items():
             if cov_name not in self.cov_names:
-                warn(f"{cov_name} not in the model, "
-                     f"ignore it in slope_quantile.")
+                warn(f"{cov_name} not in the model, " f"ignore it in slope_quantile.")
             else:
                 quantile_value[cov_name] = np.quantile(
                     coefs[:, self.cov_names.index(cov_name)], q
                 )
         if mask_soln:
-            masked_coefs = np.vstack([coefs, self.soln['mean']])
+            masked_coefs = np.vstack([coefs, self.soln["mean"]])
             for cov_name, v in quantile_value.items():
                 index = self.cov_names.index(cov_name)
                 if slope_quantile[cov_name] >= 0.5:
@@ -367,19 +372,18 @@ class StudyModel(NodeModel):
                 study_id: masked_coefs[i]
                 for i, study_id in enumerate(self.data.studies)
             }
-            masked_soln['mean'] = masked_coefs[-1]
+            masked_soln["mean"] = masked_coefs[-1]
             return quantile_value, masked_soln
         else:
             return quantile_value
 
     def soln_to_df(self, path: str = None) -> pd.DataFrame:
-        """Write solution.
-        """
-        df = pd.DataFrame.from_dict(
-            self.soln,
-            orient='index',
-            columns=self.cov_names
-        ).reset_index().rename(columns={'index': 'study_id'})
+        """Write solution."""
+        df = (
+            pd.DataFrame.from_dict(self.soln, orient="index", columns=self.cov_names)
+            .reset_index()
+            .rename(columns={"index": "study_id"})
+        )
         if path is not None:
             df.to_csv(path)
         return df

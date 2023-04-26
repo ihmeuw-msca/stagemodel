@@ -2,22 +2,20 @@
     composite_model
     ~~~~~~~~~~~~~~~
 """
+from copy import deepcopy
 from pathlib import Path
-from typing import List, Dict, Tuple, Any, Union
+from typing import Any, Dict, List, Tuple, Union
+
 import numpy as np
 import xarray as xr
-from copy import deepcopy
+from mrtool import LinearCovModel, MRData
 
-from mrtool import MRData, LinearCovModel
 from .node_model import NodeModel, OverallModel, StudyModel
 from .utils import result_to_df
 
 
 class StagewiseModel:
-
-    def __init__(self,
-                 data: MRData,
-                 node_models: List[NodeModel]):
+    def __init__(self, data: MRData, node_models: List[NodeModel]):
         self.node_models = node_models
         self.num_models = len(node_models)
         self.data_list = [data]
@@ -45,28 +43,34 @@ class StagewiseModel:
     ) -> Union[np.ndarray, xr.DataArray]:
         if data is None:
             data = self.data_list[0]
-        pred = self.node_models[0].predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
+        pred = self.node_models[0].predict(
+            data, slope_quantile=slope_quantile, ref_cov=ref_cov
+        )
         if len(self.node_models) > 1:
             for model in self.node_models[1:]:
-                pred += model.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
+                pred += model.predict(
+                    data, slope_quantile=slope_quantile, ref_cov=ref_cov
+                )
         return pred
 
     def soln_to_df(self, i: int, path: str = None):
         return self.node_models[i].soln_to_df(path)
 
-    def result_to_df(self, i: int = None, path: str = None,
-                     prediction: str = 'prediction',
-                     residual: str = 'residual'):
+    def result_to_df(
+        self,
+        i: int = None,
+        path: str = None,
+        prediction: str = "prediction",
+        residual: str = "residual",
+    ):
         if i is not None:
             df = self.node_models[i].result_to_df(path, prediction, residual)
         else:
-            df = result_to_df(self, self.data_list[0],
-                              path, prediction, residual)
+            df = result_to_df(self, self.data_list[0], path, prediction, residual)
         return df
 
 
 class TwoStageModel:
-
     def __init__(
         self,
         data: MRData,
@@ -109,11 +113,13 @@ class TwoStageModel:
             data = self.data1
         data._sort_by_data_id()
         pred1 = self.model1.predict(data)
-        return self.model2.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov) + pred1
+        return (
+            self.model2.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
+            + pred1
+        )
 
 
 class ReverseTwoStageModel:
-
     def __init__(
         self,
         data: MRData,
@@ -155,5 +161,7 @@ class ReverseTwoStageModel:
         if data is None:
             data = self.data1
         data._sort_by_data_id()
-        pred1 = self.model1.predict(data, slope_quantile=slope_quantile, ref_cov=ref_cov)
+        pred1 = self.model1.predict(
+            data, slope_quantile=slope_quantile, ref_cov=ref_cov
+        )
         return self.model2.predict(data) + pred1
