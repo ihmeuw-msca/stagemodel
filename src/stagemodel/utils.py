@@ -3,15 +3,15 @@
     ~~~~~
 """
 from typing import Dict, Union
+
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize, OptimizeResult
+from scipy.optimize import OptimizeResult, minimize
 
 
-def solve_ls(mat: np.ndarray,
-             obs: np.ndarray,
-             obs_se: np.ndarray,
-             gprior: np.ndarray = None) -> np.ndarray:
+def solve_ls(
+    mat: np.ndarray, obs: np.ndarray, obs_se: np.ndarray, gprior: np.ndarray = None
+) -> np.ndarray:
     """Solve least square problem
 
     Args:
@@ -24,20 +24,23 @@ def solve_ls(mat: np.ndarray,
         np.ndarray: Solution.
     """
     v = obs_se**2
-    eq_mat = (mat.T/v).dot(mat)
-    eq_vec = (mat.T/v).dot(obs)
+    eq_mat = (mat.T / v).dot(mat)
+    eq_vec = (mat.T / v).dot(obs)
     if gprior is not None:
-        eq_mat += np.diag(1.0/gprior[1]**2)
-        eq_vec += gprior[0]/gprior[1]**2
+        eq_mat += np.diag(1.0 / gprior[1] ** 2)
+        eq_vec += gprior[0] / gprior[1] ** 2
     return np.linalg.solve(eq_mat, eq_vec)
 
 
-def solve_ls_b(mat: np.ndarray,
-               obs: np.ndarray, obs_se: np.ndarray,
-               bounds: np.ndarray,
-               gprior: np.ndarray = None,
-               options: Dict = None,
-               return_info: bool = False) -> Union[np.ndarray, OptimizeResult]:
+def solve_ls_b(
+    mat: np.ndarray,
+    obs: np.ndarray,
+    obs_se: np.ndarray,
+    bounds: np.ndarray,
+    gprior: np.ndarray = None,
+    options: Dict = None,
+    return_info: bool = False,
+) -> Union[np.ndarray, OptimizeResult]:
     """Solve least square with bounds problem
 
     Args:
@@ -58,38 +61,48 @@ def solve_ls_b(mat: np.ndarray,
     v = obs_se**2
 
     if gprior is None:
+
         def objective(x):
             r = obs - mat.dot(x)
-            return 0.5*np.sum(r**2/v)
+            return 0.5 * np.sum(r**2 / v)
 
         def gradient(x):
             r = obs - mat.dot(x)
-            return (mat.T/v).dot(r)
+            return (mat.T / v).dot(r)
+
     else:
+
         def objective(x):
             r = obs - mat.dot(x)
-            return 0.5*np.sum(r**2/v) + 0.5*np.sum((x - gprior[0])**2/gprior[1]**2)
+            return 0.5 * np.sum(r**2 / v) + 0.5 * np.sum(
+                (x - gprior[0]) ** 2 / gprior[1] ** 2
+            )
 
         def gradient(x):
             r = obs - mat.dot(x)
-            return -(mat.T/v).dot(r) + (x - gprior[0])/gprior[1]**2
+            return -(mat.T / v).dot(r) + (x - gprior[0]) / gprior[1] ** 2
 
-    opt_result = minimize(objective,
-                          x0=x_init,
-                          jac=gradient,
-                          method='L-BFGS-B',
-                          bounds=bounds,
-                          options=options)
+    opt_result = minimize(
+        objective,
+        x0=x_init,
+        jac=gradient,
+        method="L-BFGS-B",
+        bounds=bounds,
+        options=options,
+    )
 
     result = opt_result if return_info else opt_result.x
 
     return result
 
 
-def result_to_df(model, data,
-                 path: str = None,
-                 prediction: str = 'prediction',
-                 residual: str = 'residual') -> pd.DataFrame:
+def result_to_df(
+    model,
+    data,
+    path: str = None,
+    prediction: str = "prediction",
+    residual: str = "residual",
+) -> pd.DataFrame:
     """Create result data frame.
 
     Args:
